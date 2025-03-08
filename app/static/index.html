@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>AI Clinic - DICOM服务测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-section {
+            margin-bottom: 30px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #response {
+            background: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+        .file-info {
+            font-size: 0.9em;
+            color: #666;
+            margin: 5px 0;
+            font-style: italic;
+        }
+        .file-input {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px dashed #ccc;
+            border-radius: 4px;
+        }
+        .file-input:hover {
+            border-color: #4CAF50;
+            background-color: #f9f9f9;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Clinic - DICOM服务测试页面</h1>
+    
+    <div class="container">
+        <div class="test-section">
+            <h2>1. 服务状态测试</h2>
+            <button onclick="testHealth()">测试服务状态</button>
+            <div id="healthResponse" class="response"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. CT扫描转DICOM</h2>
+            <div class="file-input">
+                <input type="file" id="ctFile">
+                <div class="file-info">支持任意CT扫描文件，无需后缀名</div>
+                <button onclick="convertToDicom()">转换为DICOM</button>
+            </div>
+            <div class="progress" id="convertProgress">
+                <div class="progress-bar"></div>
+            </div>
+            <div id="convertResponse" class="response"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. DICOM文件上传</h2>
+            <div class="file-input">
+                <input type="file" id="dicomFile" accept=".dcm">
+                <button onclick="uploadDicom()">上传DICOM文件</button>
+            </div>
+            <div class="progress" id="uploadProgress">
+                <div class="progress-bar"></div>
+            </div>
+            <div id="uploadResponse" class="response"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. PACS查询测试</h2>
+            <input type="text" id="patientId" placeholder="患者ID">
+            <button onclick="searchPacs()">查询PACS</button>
+            <div id="searchResponse" class="response"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                document.getElementById('healthResponse').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('healthResponse').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        let currentTaskId = null;
+        let statusCheckInterval = null;
+
+        async function convertToDicom() {
+            const fileInput = document.getElementById('ctFile');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('请选择文件');
+                return;
+            }
+
+            // 显示进度条
+            const progressDiv = document.getElementById('convertProgress');
+            const progressBar = progressDiv.querySelector('.progress-bar');
+            progressDiv.style.display = 'block';
+            progressBar.style.width = '0%';
+
+            try {
+                // 上传文件
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`上传失败: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                currentTaskId = data.task_id;
+
+                // 更新响应区域
+                document.getElementById('convertResponse').textContent = 
+                    `文件已上传，正在处理中...\n任务ID: ${currentTaskId}`;
+
+                // 开始定期检查状态
+                if (statusCheckInterval) {
+                    clearInterval(statusCheckInterval);
+                }
+                statusCheckInterval = setInterval(checkTaskStatus, 1000);
+
+            } catch (error) {
+                document.getElementById('convertResponse').textContent = `错误: ${error.message}`;
+                progressDiv.style.display = 'none';
+            }
+        }
+
+        async function checkTaskStatus() {
+            if (!currentTaskId) return;
+
+            try {
+                const response = await fetch(`/status/${currentTaskId}`);
+                if (!response.ok) {
+                    throw new Error(`获取状态失败: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const responseDiv = document.getElementById('convertResponse');
+                const progressDiv = document.getElementById('convertProgress');
+                const progressBar = progressDiv.querySelector('.progress-bar');
+
+                // 更新状态显示
+                let statusText = `状态: ${data.status}\n`;
+                statusText += `消息: ${data.message}\n`;
+                
+                if (data.error) {
+                    statusText += `错误: ${data.error}\n`;
+                }
+
+                if (data.dicom_files && data.dicom_files.length > 0) {
+                    statusText += '\n转换后的文件:\n';
+                    responseDiv.innerHTML = statusText;  // 使用innerHTML来支持链接
+                    
+                    // 为每个文件创建下载链接
+                    data.dicom_files.forEach(file => {
+                        const fileName = file.split('/').pop();
+                        const downloadUrl = `/download/${currentTaskId}/${fileName}`;
+                        const linkHtml = `<div>- <a href="${downloadUrl}" download="${fileName}">${fileName}</a></div>`;
+                        responseDiv.innerHTML += linkHtml;
+                    });
+                } else {
+                    responseDiv.textContent = statusText;
+                }
+
+                // 更新进度条
+                if (data.status === 'completed') {
+                    progressBar.style.width = '100%';
+                    clearInterval(statusCheckInterval);
+                } else if (data.status === 'failed') {
+                    progressDiv.style.display = 'none';
+                    clearInterval(statusCheckInterval);
+                } else {
+                    progressBar.style.width = '50%';  // 处理中状态
+                }
+
+            } catch (error) {
+                document.getElementById('convertResponse').textContent = `错误: ${error.message}`;
+                clearInterval(statusCheckInterval);
+            }
+        }
+
+        async function uploadDicom() {
+            const fileInput = document.getElementById('dicomFile');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('请选择文件');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                document.getElementById('uploadResponse').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('uploadResponse').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        async function searchPacs() {
+            try {
+                const response = await fetch('/search');
+                const data = await response.json();
+                document.getElementById('searchResponse').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('searchResponse').textContent = `错误: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
