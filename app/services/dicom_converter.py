@@ -1,18 +1,28 @@
+from app.services.waveform_extractor import WaveformExtractor
 import os
+import sys
 import subprocess
 import tempfile
 from pathlib import Path
+import logging
+from threading import Lock
+import imghdr
+import json
+import cv2
+import numpy as np
 from datetime import datetime
 import uuid
-import numpy as np
 from PIL import Image
 import pydicom
 from pydicom.uid import generate_uid
 import shutil
 import msvcrt
+import matplotlib.pyplot as plt
+from scipy import signal
+from scipy.interpolate import interp1d
+from io import BytesIO
+
 from app.utils.logger_config import logger
-from threading import Lock
-import imghdr
 
 class DicomConverter:
     def __init__(self, dcmtk_path=None):
@@ -23,6 +33,16 @@ class DicomConverter:
         self.dcmtk_path = dcmtk_path or ""
         self._check_dcmtk()
         self.img2dcm_lock = Lock()
+        
+        # 设置默认的YOLOv7路径
+        yolo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                                "ecg-image-kit", "codes", "ecg-image-digitizer", "roi", "yolov7")
+        if not os.path.exists(yolo_path):
+            raise ValueError(f"YOLOv7路径不存在: {yolo_path}")
+            
+        # 初始化波形提取器
+        self.waveform_extractor = WaveformExtractor(yolo_path)
+        self.last_waveform_data = None
 
     def _check_dcmtk(self):
         """检查dcmtk是否可用"""
@@ -124,71 +144,10 @@ class DicomConverter:
             logger.error(f"提取波形数据失败: {str(e)}")
             return None
 
-    def _create_dicom_metadata(self):
-        """创建基本的DICOM元数据"""
-        # 创建文件元信息数据集
-        file_meta = pydicom.Dataset()
-        file_meta.MediaStorageSOPClassUID = '1.2.840.10008.5.1.4.1.1.9.1.1'  # 12-lead ECG Waveform Storage
-        file_meta.MediaStorageSOPInstanceUID = generate_uid()
-        file_meta.ImplementationClassUID = generate_uid()
-        file_meta.TransferSyntaxUID = '1.2.840.10008.1.2.1'  # Explicit VR Little Endian
-        
-        # 创建数据集
-        ds = pydicom.FileDataset(None, {}, file_meta=file_meta, preamble=b"\0" * 128)
-        
-        # 添加必需的元素
-        ds.SOPClassUID = file_meta.MediaStorageSOPClassUID
-        ds.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
-        ds.StudyInstanceUID = generate_uid()
-        ds.SeriesInstanceUID = generate_uid()
-        
-        # 设置日期和时间
-        dt = datetime.now()
-        ds.ContentDate = dt.strftime('%Y%m%d')
-        ds.ContentTime = dt.strftime('%H%M%S.%f')
-        ds.StudyDate = dt.strftime('%Y%m%d')  # 确保设置StudyDate
-        ds.StudyTime = dt.strftime('%H%M%S.%f')
-        
-        # ECG特定的标签
-        ds.Modality = 'ECG'
-        ds.PatientName = 'ANONYMOUS'
-        ds.PatientID = str(uuid.uuid4())
-        ds.PatientBirthDate = ''
-        ds.PatientSex = ''
-        ds.AccessionNumber = ''
-        
-        # Waveform Sequence
-        ds.WaveformSequence = [pydicom.Dataset()]
-        waveform = ds.WaveformSequence[0]
-        waveform.WaveformOriginality = 'ORIGINAL'
-        waveform.NumberOfWaveformChannels = 12
-        waveform.NumberOfWaveformSamples = 5000  # 示例值，需要根据实际数据调整
-        waveform.SamplingFrequency = 500  # Hz
-        waveform.WaveformBitsAllocated = 16  # 设置位深度
-        waveform.WaveformSampleInterpretation = 'SS'  # 有符号16位整数
-        waveform.ChannelDefinitionSequence = []
-        
-        # 为每个导联创建通道定义
-        leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
-        for i, lead in enumerate(leads):
-            channel = pydicom.Dataset()
-            channel.WaveformChannelNumber = i + 1
-            channel.ChannelLabel = lead
-            channel.ChannelSourceSequence = [pydicom.Dataset()]
-            channel.ChannelSourceSequence[0].CodeValue = lead
-            channel.ChannelSourceSequence[0].CodingSchemeDesignator = 'MDC'
-            channel.ChannelSourceSequence[0].CodeMeaning = f'Lead {lead}'
-            channel.ChannelSensitivity = 1.0
-            channel.ChannelSensitivityUnitsSequence = [pydicom.Dataset()]
-            channel.ChannelSensitivityUnitsSequence[0].CodeValue = 'mV'
-            channel.ChannelSensitivityUnitsSequence[0].CodingSchemeDesignator = 'UCUM'
-            channel.ChannelSensitivityUnitsSequence[0].CodeMeaning = 'millivolt'
-            waveform.ChannelDefinitionSequence.append(channel)
-        
-        return ds
-
     def convert_to_dicom(self, input_file: Path, output_file: Path) -> bool:
-        """Convert an image file to DICOM format"""
+        """
+        Convert an image file to DICOM format
+        """
         try:
             logger.info(f"开始转换文件: {input_file} -> {output_file}")
             
@@ -218,40 +177,178 @@ class DicomConverter:
             
             # 如果是图像文件，使用图像转换逻辑
             logger.info("使用图像转换逻辑")
-            with Image.open(input_file) as img:
-                # 转换为灰度图
-                img_gray = img.convert('L')
-                img_array = np.array(img_gray)
+            
+            # 确保输出目录存在
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # 创建DICOM数据集
+            logger.info("创建DICOM数据集")
+            ds = pydicom.Dataset()
+            
+            # 添加文件元信息
+            file_meta = pydicom.Dataset()
+            file_meta.FileMetaInformationGroupLength = 200
+            file_meta.FileMetaInformationVersion = b'\x00\x01'
+            file_meta.MediaStorageSOPClassUID = '1.2.840.10008.5.1.4.1.1.9.1.2'  # General ECG Waveform Storage
+            file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+            file_meta.TransferSyntaxUID = '1.2.840.10008.1.2.1'  # Explicit VR Little Endian
+            file_meta.ImplementationClassUID = '1.2.826.0.1.3680043.9.7433.1.1'
+            file_meta.ImplementationVersionName = 'AIClinic'
+            ds.file_meta = file_meta
+            
+            # 设置传输语法
+            ds.is_little_endian = True
+            ds.is_implicit_VR = False
+            
+            # 添加必需的DICOM标签
+            ds.SOPClassUID = file_meta.MediaStorageSOPClassUID
+            ds.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
+            ds.StudyInstanceUID = pydicom.uid.generate_uid()
+            ds.SeriesInstanceUID = pydicom.uid.generate_uid()
+            
+            # 设置其他必需的标签
+            ds.Modality = 'ECG'
+            ds.ConversionType = 'WSD'  # Waveform Storage Device
+            ds.StudyDate = datetime.now().strftime('%Y%m%d')
+            ds.StudyTime = datetime.now().strftime('%H%M%S')
+            ds.ContentDate = ds.StudyDate
+            ds.ContentTime = ds.StudyTime
+            ds.AcquisitionDateTime = datetime.now().strftime('%Y%m%d%H%M%S')
+            
+            # 设置患者和研究信息（使用默认值）
+            ds.PatientName = ''
+            ds.PatientID = ''
+            ds.PatientBirthDate = ''
+            ds.PatientSex = ''
+            ds.AccessionNumber = ''
+            
+            # 使用WaveformExtractor提取波形数据
+            logger.info("开始提取波形数据...")
+            try:
+                # 使用已知的标签文件
+                labels_path = os.path.join(
+                    str(self.waveform_extractor.yolo_path),
+                    "runs", "detect", "exp51", "labels", "test.txt"
+                )
+                logger.info(f"使用标签文件: {labels_path}")
                 
-                # 创建DICOM数据集
-                ds = self._create_dicom_metadata()
-                
-                # 设置波形数据
-                num_samples = img_array.shape[1]  # 使用图像宽度作为采样点数
-                ds.WaveformSequence[0].NumberOfWaveformSamples = num_samples
-                
-                # 创建波形数据
-                waveform_data = []
-                for i in range(12):  # 12个导联
-                    # 从图像不同行采样数据
-                    row = int(i * img_array.shape[0] / 12)
-                    channel_data = img_array[row, :].astype(np.int16)  # 使用16位整数
-                    # 归一化到合理的mV范围 (-5mV to +5mV)
-                    channel_data = ((channel_data - 128) * 10).astype(np.int16)  # 转换为整数值
-                    waveform_data.extend(channel_data)
-                
-                # 将波形数据添加到DICOM数据集
-                ds.WaveformSequence[0].WaveformData = bytes(np.array(waveform_data, dtype=np.int16).tobytes())
-                
-                # 保存DICOM文件
-                ds.save_as(str(output_file), write_like_original=False)
-                
-                # 检查输出文件是否存在且大小合理
-                if output_file.exists():
-                    output_size = output_file.stat().st_size
-                    logger.info(f"DICOM文件已生成: {output_file} (大小: {output_size} bytes)")
+                if not os.path.exists(labels_path):
+                    logger.warning(f"标签文件不存在: {labels_path}，尝试运行检测...")
+                    # 如果标签文件不存在，运行检测
+                    waveforms = self.waveform_extractor.detect_and_extract(str(input_file), use_min_length=False)  # 保持原始长度
                 else:
-                    raise Exception("DICOM文件未生成")
+                    # 如果标签文件存在，直接使用
+                    waveforms = self.waveform_extractor.detect_and_extract(str(input_file), labels_path, use_min_length=False)  # 保持原始长度
+                if not waveforms:
+                    logger.error("WaveformExtractor返回空的波形数据")
+                    raise ValueError("无法提取波形数据")
+                logger.info(f"成功提取波形数据，包含导联: {list(waveforms.keys())}")
+                
+                # 保存图片到服务器
+                save_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "dicom_files", "test")
+                os.makedirs(save_dir, exist_ok=True)
+                save_path = os.path.join(save_dir, os.path.basename(input_file))
+                shutil.copy2(str(input_file), save_path)
+                logger.info(f"已保存图片到: {save_path}")
+                
+                # 设置采样点数
+                # 使用第一个导联的长度作为参考
+                num_samples = len(waveforms['I'])
+                logger.info(f"使用导联 I 的长度作为参考: {num_samples}")
+                
+                # 检查所有导联的数据
+                for lead in ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']:
+                    if lead not in waveforms:
+                        logger.error(f"缺少导联 {lead} 的数据")
+                        raise ValueError(f"缺少导联 {lead} 的数据")
+                    if len(waveforms[lead]) != num_samples:
+                        logger.error(f"导联 {lead} 的采样点数 ({len(waveforms[lead])}) 与参考值 ({num_samples}) 不一致")
+                        raise ValueError(f"导联 {lead} 的采样点数不一致")
+                
+                # 保存波形数据供后续使用
+                self.last_waveform_data = waveforms
+            except Exception as e:
+                logger.error(f"提取波形数据时出错: {str(e)}")
+                import traceback
+                logger.error(f"详细错误: {traceback.format_exc()}")
+                raise ValueError(f"提取波形数据失败: {str(e)}")
+            
+            # 现在我们有了num_samples，创建波形序列
+            ds.WaveformSequence = [pydicom.Dataset()]
+            waveform = ds.WaveformSequence[0]
+            waveform.WaveformOriginality = 'ORIGINAL'
+            waveform.NumberOfWaveformChannels = 12
+            waveform.SamplingFrequency = 500  # Hz
+            waveform.WaveformBitsAllocated = 16
+            waveform.WaveformBitsStored = 16
+            waveform.WaveformSampleInterpretation = 'SS'
+            waveform.ChannelDefinitionSequence = []
+            
+            # 为每个导联创建通道定义
+            leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
+            for i, lead in enumerate(leads):
+                channel = pydicom.Dataset()
+                channel.WaveformChannelNumber = i + 1
+                channel.ChannelLabel = lead
+                channel.ChannelSourceSequence = [pydicom.Dataset()]
+                source = channel.ChannelSourceSequence[0]
+                source.CodeValue = f'5.6.3-9-{i+1}'  # SCPECG标准代码
+                source.CodingSchemeDesignator = 'SCPECG'
+                source.CodingSchemeVersion = '1.3'
+                source.CodeMeaning = f'Lead {lead}'
+                
+                # 设置通道属性
+                channel.ChannelSensitivity = 5.0  # 使用5.0 μV/unit而不是1.0
+                channel.ChannelSensitivityUnitsSequence = [pydicom.Dataset()]
+                units = channel.ChannelSensitivityUnitsSequence[0]
+                units.CodeValue = 'uV'
+                units.CodingSchemeDesignator = 'UCUM'
+                units.CodingSchemeVersion = '1.4'
+                units.CodeMeaning = 'microvolt'
+                
+                # 设置其他必要的通道属性
+                channel.ChannelSensitivityCorrectionFactor = 1.0
+                channel.ChannelBaseline = 0.0
+                channel.ChannelSampleSkew = 0.0
+                channel.WaveformBitsStored = 16
+                channel.FilterLowFrequency = 0.16  # 标准ECG低频截止
+                channel.FilterHighFrequency = 150.0  # 标准ECG高频截止
+                
+                waveform.ChannelDefinitionSequence.append(channel)
+            
+            # 组装波形数据（按照标准导联顺序）
+            all_leads_data = []
+            for lead in ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']:
+                # 归一化数据到合适的范围（考虑到5.0的灵敏度）
+                data = waveforms[lead]
+                # 如果这个导联的数据点数与参考不同，记录警告但继续处理
+                if len(data) != num_samples:
+                    logger.warning(f"导联 {lead} 的数据点数 ({len(data)}) 与参考值 ({num_samples}) 不同")
+                data = (data * 5.0).astype(np.int16)  # 转换为16位整数，考虑灵敏度
+                all_leads_data.extend(data)
+            
+            # 检查数据大小
+            expected_size = sum(len(waveforms[lead]) for lead in ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']) * 2  # 2字节/采样点
+            actual_size = len(all_leads_data) * 2
+            if actual_size != expected_size:
+                logger.error(f"波形数据大小不匹配: 预期{expected_size}字节，实际{actual_size}字节")
+                raise ValueError(f"波形数据大小不匹配")
+            
+            # 添加到DICOM数据集
+            ds.WaveformSequence[0].WaveformData = bytes(np.array(all_leads_data, dtype=np.int16).tobytes())
+            logger.info(f"成功添加波形数据，每个导联 {num_samples} 个采样点")
+            
+            # 保存DICOM文件
+            logger.info(f"开始保存DICOM文件: {output_file}")
+            ds.save_as(str(output_file), write_like_original=False)
+            
+            # 检查输出文件是否存在且大小合理
+            if output_file.exists():
+                output_size = output_file.stat().st_size
+                logger.info(f"DICOM文件已生成: {output_file} (大小: {output_size} bytes)")
+            else:
+                logger.error("DICOM文件未生成")
+                raise Exception("DICOM文件未生成")
             
             return True
             
