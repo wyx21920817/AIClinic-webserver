@@ -26,7 +26,8 @@ class WaveformExtractor:
             logger.error(f"detect.py不存在: {self.detect_script}")
             raise ValueError(f"detect.py不存在: {self.detect_script}")
             
-        self.weights = self.yolo_path / "best.pt"
+        project_root = Path(__file__).parent.parent.parent
+        self.weights = project_root / "models" / "best.pt"
         if not self.weights.exists():
             logger.error(f"模型权重文件不存在: {self.weights}")
             raise ValueError(f"模型权重文件不存在: {self.weights}")
@@ -55,10 +56,15 @@ class WaveformExtractor:
         # 如果没有提供标签文件，则运行检测
         if labels_path is None:
             logger.info("未提供标签文件，开始运行检测...")
-            # 设置固定的输出目录
-            output_dir = self.yolo_path / "runs" / "detect" / "latest"
+            
+            # 从图像路径获取task_id
+            task_id = Path(image_path).parent.name
+            project_root = Path(__file__).parent.parent.parent
+            output_dir = project_root / "dicom_files" / task_id / "detect"
+            
             if output_dir.exists():
                 shutil.rmtree(str(output_dir))
+            output_dir.parent.mkdir(parents=True, exist_ok=True)
             
             # 运行YOLOv7检测
             cmd = [
@@ -67,8 +73,8 @@ class WaveformExtractor:
                 "--conf", "0.25",
                 "--source", image_path,
                 "--save-txt",  # 保存标签文件
-                "--project", str(self.yolo_path / "runs" / "detect"),  # 指定输出目录
-                "--name", "latest",  # 固定的输出子目录名
+                "--project", str(output_dir.parent),  # 指定输出目录为task_id目录
+                "--name", "detect",  # 输出子目录名
                 "--exist-ok"  # 如果目录存在则覆盖
             ]
             
