@@ -240,14 +240,15 @@ def assign_leads(boxes, height):
     logger.info("\n导联分配完成!")
     return leads
 
-def extract_lead_waveform(image, bbox, target_length=None, force_length=False, save_path=None):
+def extract_lead_waveform(image, bbox, target_length=3000, force_length=True, save_path=None, plot_result=False):
     """
     从图像中提取指定区域的波形
     image: 输入图像
     bbox: (x, y, w, h) 相对坐标，范围0-1
-    target_length: 目标波形长度，如果指定且force_length为True则会重采样到这个长度
-    force_length: 是否强制使用目标长度，默认False表示保持原始长度
+    target_length: 目标波形长度，默认3000点
+    force_length: 是否强制使用目标长度，默认True表示强制使用3000点
     save_path: 可选，保存切片图像的路径
+    plot_result: 可选，是否绘制波形，默认False
     """
     height, width = image.shape[:2]
     x, y, w, h = bbox
@@ -273,13 +274,16 @@ def extract_lead_waveform(image, bbox, target_length=None, force_length=False, s
         logger.info(f"已保存切片图像到: {save_path}")
     
     # 使用专门的ECG波形提取函数
-    waveform = image_to_sequence(lead_image, mode='dark-foreground', method='combined_all_neighbors')
+    waveform = image_to_sequence(lead_image, mode='dark-foreground', method='combined_all_neighbors', plot_result=False)
+    logger.info(f"提取的波形: 类型={waveform.dtype}, 最小值={waveform.min():.3f}, 最大值={waveform.max():.3f}")
     
-    # 缩放到合适的范围
-    waveform = waveform * 100 - 50  # 缩放到 -50 到 50 的范围
+    # 记录波形信息
+    logger.info(f"波形统计信息: 长度={len(waveform)}, 最小值={waveform.min():.3f}, 最大值={waveform.max():.3f}, 均值={waveform.mean():.3f}")
+    logger.info(f"波形前20个点: {waveform[:20]}")
+    logger.info(f"波形后20个点: {waveform[-20:]}")
     
-    # 如果指定了目标长度且需要强制长度，进行重采样
-    if target_length is not None and force_length and len(waveform) != target_length:
+    # 确保波形长度为3000点
+    if len(waveform) != target_length:
         # 创建原始时间点
         x_original = np.linspace(0, 1, len(waveform))
         # 创建目标时间点
@@ -288,7 +292,7 @@ def extract_lead_waveform(image, bbox, target_length=None, force_length=False, s
         interpolator = interp1d(x_original, waveform, kind='cubic', bounds_error=False, fill_value="extrapolate")
         # 重采样
         waveform = interpolator(x_target)
-        
+    
     return waveform
 
 def plot_all_leads(image_path, labels_path, output_dir='dicom_files/test', use_min_length=True):
@@ -324,6 +328,7 @@ def plot_all_leads(image_path, labels_path, output_dir='dicom_files/test', use_m
     
     # 解析标签
     boxes = []
+    
     for line in lines:
         values = line.strip().split()
         if len(values) == 5:
@@ -355,7 +360,7 @@ def plot_all_leads(image_path, labels_path, output_dir='dicom_files/test', use_m
         try:
             # 构建切片图像保存路径
             slice_path = os.path.join(slices_dir, f'lead_{lead_name}.png')
-            waveform = extract_lead_waveform(image, bbox, save_path=slice_path)
+            waveform = extract_lead_waveform(image, bbox, save_path=slice_path, plot_result=False)
             waveforms[lead_name] = waveform
             lengths.append(len(waveform))
         except Exception as e:
@@ -372,7 +377,7 @@ def plot_all_leads(image_path, labels_path, output_dir='dicom_files/test', use_m
             try:
                 # 构建切片图像保存路径
                 slice_path = os.path.join(slices_dir, f'lead_{lead_name}_resampled.png')
-                waveform = extract_lead_waveform(image, bbox, target_length=min_length, force_length=True, save_path=slice_path)
+                waveform = extract_lead_waveform(image, bbox, target_length=min_length, force_length=True, save_path=slice_path, plot_result=False)
                 waveforms[lead_name] = waveform
             except Exception as e:
                 logger.error(f"重采样导联 {lead_name} 的波形时出错: {str(e)}")

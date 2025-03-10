@@ -2,6 +2,11 @@ import numpy as np
 import cv2
 from typing import Union, Tuple, List
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+import logging
+
+# 设置日志
+logger = logging.getLogger(__name__)
 
 def find_wave_height_range(img: np.ndarray) -> Tuple[int, int]:
     """
@@ -65,6 +70,14 @@ def image_to_sequence(img: Union[str, np.ndarray],
     
     height, width = img.shape
     
+    # 标准化图像大小
+    target_height = 1000
+    target_width = 3000
+    if height != target_height or width != target_width:
+        img = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
+        height, width = target_height, target_width
+        logger.info(f"调整图像大小到标准尺寸: {width}x{height}")
+    
     # 根据不同方法处理图像
     if method == 'max_finder':
         img_filtered = img
@@ -104,12 +117,15 @@ def image_to_sequence(img: Union[str, np.ndarray],
     
     # 找每列的最大值点（波形位置）
     data = np.argmax(img_filtered, axis=0)
+    logger.info(f"argmax后的数据: 类型={data.dtype}, 最小值={data.min()}, 最大值={data.max()}")
     
     # 转换为波形振幅（反转Y轴）
     data = height - data
+    logger.info(f"反转Y轴后的数据: 类型={data.dtype}, 最小值={data.min()}, 最大值={data.max()}")
     
-    # 归一化数据到0-1范围
-    data = (data - np.min(data)) / (np.max(data) - np.min(data))
+    # 缩放数据到合适的范围（-5到5）
+    data = ((data - np.min(data)) / (np.max(data) - np.min(data)) * 10) - 5
+    logger.info(f"缩放后的数据: 类型={data.dtype}, 最小值={data.min():.3f}, 最大值={data.max():.3f}, 前20个点={data[:20]}")
     
     # 绘制结果
     if plot_result:

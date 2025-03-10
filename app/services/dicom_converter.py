@@ -263,17 +263,14 @@ class DicomConverter:
                         # 获取当前导联的数据并保持原样
                         lead_data = waveforms[lead]
                         
-                        # 将数据缩放到±5mV范围
-                        max_abs_val = max(abs(np.min(lead_data)), abs(np.max(lead_data)))
-                        if max_abs_val != 0:  # 避免除以零
-                            scale_factor = 5.0 / max_abs_val  # 缩放因子，使最大绝对值为5mV
-                            lead_data = lead_data * scale_factor
-                        else:
-                            # 如果信号是恒定值为0，保持为0
-                            lead_data = np.zeros_like(lead_data)
-                            
-                        # 转换为int16类型
-                        lead_data = lead_data.astype(np.int16)
+                        # 只保留中间的3/5数据
+                        total_points = len(lead_data)
+                        start_idx = total_points // 5  # 跳过前1/5
+                        end_idx = total_points - total_points // 5  # 跳过后1/5
+                        lead_data = lead_data[start_idx:end_idx]
+                        
+                        # 使用标准ECG数字化转换，使用较小的转换因子
+                        lead_data = (lead_data * 655 / 2).astype(np.int16)
                         
                         # 记录导联数据的一些基本信息
                         logger.info(f"导联 {lead} 数据: 长度={len(lead_data)}, 最小值={lead_data.min()}, 最大值={lead_data.max()}")
@@ -282,7 +279,7 @@ class DicomConverter:
                         if samples_per_lead is None:
                             samples_per_lead = len(lead_data)
                         elif len(lead_data) != samples_per_lead:
-                            raise ValueError(f"导联 {lead} 的采样点数 ({len(lead_data)}) 与其他导联不同 ({samples_per_lead})")
+                            raise ValueError(f"导联 {lead} 的采样点数 ({len(lead_data)})。5 与其他导联不同 ({samples_per_lead})")
                         
                         # 保存到字典中
                         lead_data_dict[lead] = lead_data
