@@ -329,10 +329,10 @@ class DicomConverter:
                     source.CodeMeaning = f'Lead {lead}'
                     
                     # 设置通道属性，使用正确的单位和缩放
-                    channel.ChannelSensitivity = 1.0
+                    channel.ChannelSensitivity = 0.00152587890625  # 1/6553.6 mV per unit
                     channel.ChannelSensitivityUnitsSequence = [pydicom.Dataset()]
                     units = channel.ChannelSensitivityUnitsSequence[0]
-                    units.CodeValue = 'mV'  # 毫伏
+                    units.CodeValue = 'mV'  # millivolt
                     units.CodingSchemeDesignator = 'UCUM'
                     units.CodingSchemeVersion = '1.4'
                     units.CodeMeaning = 'millivolt'
