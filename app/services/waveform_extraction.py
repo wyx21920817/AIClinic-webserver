@@ -162,10 +162,12 @@ def cluster_boxes_by_y(boxes, min_gap=0.1):
             class_id, x, y, w, h = box
             print(f"  - ID={class_id}, x={x:.3f}, y={y:.3f}, w={w:.3f}, h={h:.3f}")
     
-    # 如果有4组或更多，只保留前3组
-    if len(clusters) > 3:
-        print(f"\n检测到 {len(clusters)} 组，只保留前3组")
-        return clusters[:3]
+    # 过滤掉框数量少于4个的组
+    filtered_clusters = [c for c in clusters if len(c) >= 4]
+    if len(filtered_clusters) != len(clusters):
+        removed = len(clusters) - len(filtered_clusters)
+        print(f"\n检测到 {len(clusters)} 组，移除了 {removed} 个框数量少于4的组")
+        return filtered_clusters
     
     return clusters
 

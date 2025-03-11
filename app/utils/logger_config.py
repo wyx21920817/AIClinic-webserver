@@ -58,6 +58,10 @@ def setup_logger(name='AIClinic', log_file='server.log'):
 
 def log_request_info(logger, request, response_status=None, error=None):
     """记录详细的请求信息"""
+    # 忽略状态检查请求的日志
+    if "/status/" in str(request.url):
+        return
+        
     try:
         info = {
             'timestamp': datetime.now().isoformat(),

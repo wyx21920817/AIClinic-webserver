@@ -263,10 +263,10 @@ class DicomConverter:
                         # 获取当前导联的数据并保持原样
                         lead_data = waveforms[lead]
                         
-                        # 只保留中间的3/5数据
+                        # 只保留中间的4/5数据
                         total_points = len(lead_data)
-                        start_idx = total_points // 5  # 跳过前1/5
-                        end_idx = total_points - total_points // 5  # 跳过后1/5
+                        start_idx = total_points // 10  # 跳过前1/10
+                        end_idx = total_points - total_points // 10  # 跳过后1/10
                         lead_data = lead_data[start_idx:end_idx]
                         
                         # 使用标准ECG数字化转换，使用较小的转换因子

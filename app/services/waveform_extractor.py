@@ -70,7 +70,7 @@ class WaveformExtractor:
             cmd = [
                 "python", str(self.detect_script),
                 "--weights", str(self.weights),
-                "--conf", "0.25",
+                "--conf-thres", "0.25",
                 "--source", image_path,
                 "--save-txt",  # 保存标签文件
                 "--project", str(output_dir.parent),  # 指定输出目录为task_id目录
