@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from .image_to_sequence import image_to_sequence
+from .image_to_sequence import image_to_sequence, extract_waveform_new
 import os
 import logging
 from scipy import interpolate
@@ -275,17 +275,20 @@ def extract_lead_waveform(image, bbox, target_length=3000, force_length=True, sa
         cv2.imwrite(save_path, lead_image)
         logger.info(f"已保存切片图像到: {save_path}")
     
-    # 使用专门的ECG波形提取函数
-    waveform = image_to_sequence(lead_image, mode='dark-foreground', method='combined_all_neighbors', plot_result=False)
-    logger.info(f"提取的波形: 类型={waveform.dtype}, 最小值={waveform.min():.3f}, 最大值={waveform.max():.3f}")
+    # 使用新的波形提取方法
+    x_coords, waveform = extract_waveform_new(lead_image, mode='dark-foreground', plot_result=plot_result)
     
-    # 记录波形信息
+    if len(waveform) == 0:
+        logger.warning("未能检测到波形，尝试使用原始方法")
+        waveform = image_to_sequence(lead_image, mode='dark-foreground', method='combined_all_neighbors', plot_result=False)
+    
+    logger.info(f"提取的波形: 类型={waveform.dtype}, 最小值={waveform.min():.3f}, 最大值={waveform.max():.3f}")
     logger.info(f"波形统计信息: 长度={len(waveform)}, 最小值={waveform.min():.3f}, 最大值={waveform.max():.3f}, 均值={waveform.mean():.3f}")
     logger.info(f"波形前20个点: {waveform[:20]}")
     logger.info(f"波形后20个点: {waveform[-20:]}")
     
-    # 确保波形长度为3000点
-    if len(waveform) != target_length:
+    # 确保波形长度为目标长度
+    if force_length and len(waveform) != target_length:
         # 创建原始时间点
         x_original = np.linspace(0, 1, len(waveform))
         # 创建目标时间点
