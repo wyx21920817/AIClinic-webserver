@@ -4,7 +4,7 @@ A web-based DICOM viewer application built with React and Python Flask that allo
 
 ## Features
 
-- DICOM file upload and conversion
+- DICOM file upload  and conversion
 - ECG waveform extraction and visualization
 - Automatic lead detection and classification
 - Standard ECG scaling (±5mV range)
