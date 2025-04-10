@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - AIClinic</title>
+    <link rel="stylesheet" href="/static/css/user.css">
+</head>
+<body>
+    <!-- Register Form -->
+    <div id="register-form" class="auth-container" style="display: none;">
+        <h2 class="form-title">Register</h2>
+        <div class="form-group">
+            <label for="register-username">Username:</label>
+            <input type="text" id="register-username" required>
+        </div>
+        <div class="form-group">
+            <label for="register-password">Password:</label>
+            <input type="password" id="register-password" required>
+        </div>
+        <div class="form-group">
+            <label for="register-email">Email:</label>
+            <input type="email" id="register-email" required>
+        </div>
+        <button class="btn btn-primary" onclick="register()">Register</button>
+        <div class="toggle-auth">
+            Already have an account? <a onclick="showLoginForm()">Login here</a>
+        </div>
+    </div>
+
+    <!-- Login Form -->
+    <div id="login-form" class="auth-container">
+        <h2 class="form-title">Login</h2>
+        <div class="form-group">
+            <label for="login-username">Username:</label>
+            <input type="text" id="login-username" required>
+        </div>
+        <div class="form-group">
+            <label for="login-password">Password:</label>
+            <input type="password" id="login-password" required>
+        </div>
+        <button class="btn btn-primary" onclick="login()">Login</button>
+        <div class="toggle-auth">
+            Don't have an account? <a onclick="showRegisterForm()">Register here</a>
+        </div>
+    </div>
+
+    <!-- MFA Form -->
+    <div id="mfa-form" class="auth-container" style="display: none;">
+        <h2 class="form-title">Verify Email Code</h2>
+        <input type="hidden" id="mfa-username">
+        <div class="form-group">
+            <label for="mfa-code">Enter verification code:</label>
+            <input type="text" id="mfa-code" required>
+        </div>
+        <button class="btn btn-primary" onclick="verifyMFA()">Verify</button>
+    </div>
+
+    <!-- User Dashboard -->
+    <div id="user-dashboard" class="auth-container" style="display: none;">
+        <h2 class="form-title">User Management</h2>
+        <div id="user-list" class="user-list">
+            <!-- User list will be populated here -->
+        </div>
+    </div>
+
+    <!-- Edit User Form -->
+    <div id="edit-form" class="auth-container" style="display: none;">
+        <h2 class="form-title">Edit User</h2>
+        <input type="hidden" id="edit-user-id">
+        <div class="form-group">
+            <label for="edit-email">Email:</label>
+            <input type="email" id="edit-email">
+        </div>
+        <div class="form-group">
+            <label for="edit-password">New Password (leave blank to keep current):</label>
+            <input type="password" id="edit-password">
+        </div>
+        <div class="form-group">
+            <label for="edit-role">Role:</label>
+            <select id="edit-role">
+                <option value="doctor">Doctor</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="updateUser()">Save Changes</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('edit-form').style.display='none'">Cancel</button>
+    </div>
+
+    <script src="/static/js/user.js"></script>
+</body>
+</html>

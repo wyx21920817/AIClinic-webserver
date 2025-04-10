@@ -1,28 +1,54 @@
 import os
 from pathlib import Path
+from typing import ClassVar
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 # Load environment variables
 load_dotenv()
 
-class Settings:
+class Settings(BaseSettings):
     # Server settings
-    HOST = os.getenv("HOST", "0.0.0.0")
-    PORT = int(os.getenv("PORT", "8000"))
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
     
     # Project paths
-    BASE_DIR = Path(__file__).resolve().parent.parent.parent
-    UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
-    DICOM_DIR = Path(os.getenv("DICOM_DIR", BASE_DIR / "dicom_files"))
+    BASE_DIR: ClassVar[Path] = Path(__file__).resolve().parent.parent.parent
+    UPLOAD_DIR: ClassVar[Path] = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
+    DICOM_DIR: ClassVar[Path] = Path(os.getenv("DICOM_DIR", BASE_DIR / "dicom_files"))
     
     # PACS configuration
-    PACS_HOST = os.getenv("PACS_HOST", "127.0.0.1")
-    PACS_PORT = int(os.getenv("PACS_PORT", "8000"))
-    AE_TITLE = os.getenv("AE_TITLE", "AICLINIC")
-    PACS_AE_TITLE = os.getenv("PACS_AE_TITLE", "PACS")
+    PACS_HOST: str = os.getenv("PACS_HOST", "127.0.0.1")
+    PACS_PORT: int = int(os.getenv("PACS_PORT", "8000"))
+    AE_TITLE: str = os.getenv("AE_TITLE", "AICLINIC")
+    PACS_AE_TITLE: str = os.getenv("PACS_AE_TITLE", "PACS")
     
-    # Create necessary directories
-    UPLOAD_DIR.mkdir(exist_ok=True)
-    DICOM_DIR.mkdir(exist_ok=True)
+    # MongoDB configuration
+    MONGODB_HOST: str = os.getenv("MONGODB_HOST", "localhost")
+    MONGODB_PORT: int = int(os.getenv("MONGODB_PORT", "27017"))
+    MONGODB_DB: str = os.getenv("MONGODB_DB", "aiclinic")
+    MONGODB_URI: str = os.getenv("MONGODB_URI", f"mongodb://{MONGODB_HOST}:{MONGODB_PORT}/{MONGODB_DB}")
+    
+    # JWT settings
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "60000"))  # JWT token 过期时间（分钟）
+    MFA_EXPIRE_MINUTES: int = int(os.getenv("MFA_EXPIRE_MINUTES", "50000"))   # MFA验证码过期时间（分钟）
+
+    # SMTP settings
+    SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "your-email")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "your-email-password")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Create necessary directories
+        self.UPLOAD_DIR.mkdir(exist_ok=True)
+        self.DICOM_DIR.mkdir(exist_ok=True)
+
+    class Config:
+        env_file = ".env"
+        model_config = ConfigDict(extra='allow')  # 允许额外的字段
 
 settings = Settings()

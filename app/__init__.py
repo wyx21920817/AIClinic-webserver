@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from mongoengine import connect, disconnect
 from app.utils.logger_config import logger, log_request_info
+from .core.config import settings
 import time
 import traceback
 
@@ -49,8 +51,21 @@ def create_app():
     # Mount static files
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+    # Connect to MongoDB
+    disconnect()  # Disconnect any existing connections
+    connect(
+        db=settings.MONGODB_DB,
+        host=settings.MONGODB_HOST,
+        port=settings.MONGODB_PORT
+    )
+
     # Import and register routers
     from app.api.routes import router as api_router
     app.include_router(api_router)
+
+    # Import and register controllers
+    from app.controller.usercontrol import router as user_router
+    app.include_router(user_router)
+
 
     return app
