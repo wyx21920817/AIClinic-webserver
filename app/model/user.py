@@ -24,6 +24,10 @@ class User(Document):
         'indexes': ['username', 'email']
     }
 
+    def set_username(self, username: str):
+        """Hash and set the set_username"""
+        self.username = username
+
     def set_password(self, password: str):
         """Hash and set the password"""
         self.hashed_password = pwd_context.hash(password)
