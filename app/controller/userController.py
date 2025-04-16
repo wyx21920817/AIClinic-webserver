@@ -38,12 +38,6 @@ class MFAVerify(BaseModel):
     username: str
     mfa_code: str
 
-class UserCreate(BaseModel):
-    username: str
-    password: str
-    email: str
-    role: UserRole
-
 class UserUpdate(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
@@ -234,7 +228,13 @@ async def get_user(user_id: str, current_user: User = Depends(get_current_user))
 @router.post("/users", response_model=UserResponse,
     summary="Create new user",
     description="Create new user with username, password and email. Requires admin role.")
-async def create_user(user_data: UserCreate, current_user: User = Depends(get_admin_user)):
+async def create_user(
+    username: str = Form(..., description="Username for the new account"),
+    password: str = Form(..., description="Password for the new account"),
+    email: str = Form(..., description="Email address for verification"),
+    role: UserRole = Form(..., description="User role (admin or doctor)"),
+    current_user: User = Depends(get_admin_user)
+):
     """
     Create new user with the following information:
 
@@ -245,18 +245,18 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_ad
 
     This endpoint requires admin privileges.
     """
-    if User.objects(username=user_data.username).first():
+    if User.objects(username=username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     
-    if User.objects(email=user_data.email).first():
+    if User.objects(email=email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
-        username=user_data.username,
-        email=user_data.email,
-        role=user_data.role
+        username=username,
+        email=email,
+        role=role
     )
-    user.set_password(user_data.password)
+    user.set_password(password)
     user.save()
 
     return UserResponse(
@@ -272,7 +272,10 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_ad
     description="Update user information. Requires admin role or be the user themselves.")
 async def update_user(
     user_id: str,
-    user_data: UserUpdate,
+    email: str = Form(None, description="New email address"),
+    username: str = Form(None, description="New username"),
+    password: str = Form(None, description="New password"),
+    role: Optional[UserRole] = Form(None, description="New role (admin only)"),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -294,17 +297,31 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Only admin can change role
-    if user_data.role and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Only admin can change user role")
+    # Only admin can change roles
+    if role is not None and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admin can change user roles")
 
-    if user_data.email:
-        user.email = user_data.email
-    if user_data.password:
-        user.set_password(user_data.password)
-    if user_data.role and current_user.role == UserRole.ADMIN:
-        user.role = user_data.role
+    # Update email if provided
+    if email is not None:
+        if not is_valid_email(email):
+            raise HTTPException(status_code=400, detail="Invalid email format")
+        if User.objects(email=email).first() and email != user.email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        user.email = email
 
+    # Update password if provided
+    if password is not None:
+        user.set_password(password)
+
+     # Update password if provided
+    if username is not None:
+        user.set_username(username)
+
+    # Update role if provided (admin only)
+    if role is not None:
+        user.role = role
+
+    user.updated_at = datetime.utcnow()
     user.save()
 
     return UserResponse(

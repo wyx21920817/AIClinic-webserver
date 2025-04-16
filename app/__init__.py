@@ -64,8 +64,11 @@ def create_app():
     app.include_router(api_router)
 
     # Import and register controllers
-    from app.controller.usercontrol import router as user_router
+    from app.controller.userController import router as user_router
     app.include_router(user_router)
+
+    from app.controller.patientsController import router as patients_router
+    app.include_router(patients_router)
 
 
     return app

@@ -10,8 +10,8 @@ class Gender(Enum):
 class Patient(Document):
     patient_id = StringField(required=True, unique=True)
     name = StringField(required=True)
-    gender = EnumField(Gender, required=True)
-    birth_date = DateTimeField(required=True)
+    gender = EnumField(Gender, required=False)
+    birth_date = DateTimeField(required=False)
     contact_info = DictField(default={})
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
