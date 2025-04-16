@@ -5,7 +5,7 @@ from enum import Enum
 class Gender(Enum):
     MALE = "M"
     FEMALE = "F"
-    OTHER = "Other"
+    OTHER = "Others"
 
 class Patient(Document):
     patient_id = StringField(required=True, unique=True)
