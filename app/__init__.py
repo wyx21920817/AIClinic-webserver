@@ -70,5 +70,8 @@ def create_app():
     from app.controller.patientsController import router as patients_router
     app.include_router(patients_router)
 
+    from app.controller.ecgController import router as ecg_router
+    app.include_router(ecg_router)
+
 
     return app
