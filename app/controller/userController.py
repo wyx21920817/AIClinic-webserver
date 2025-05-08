@@ -83,7 +83,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
