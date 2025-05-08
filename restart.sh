@@ -18,7 +18,7 @@ if [ ! -z "$pid" ]; then
 fi
 
 echo "Starting server..."
-python -m uvicorn main:app --host 0.0.0.0 --port 5000 &
+python3 -m uvicorn main:app --host 0.0.0.0 --port 5000 &
 echo $! > .pid
 
 echo "Server started with PID: $(cat .pid)"
