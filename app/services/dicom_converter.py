@@ -16,7 +16,6 @@ from PIL import Image
 import pydicom
 from pydicom.uid import generate_uid
 import shutil
-import msvcrt
 import matplotlib.pyplot as plt
 from scipy import signal
 from scipy.interpolate import interp1d
