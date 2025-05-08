@@ -53,11 +53,7 @@ def create_app():
 
     # Connect to MongoDB
     disconnect()  # Disconnect any existing connections
-    connect(
-        db=settings.MONGODB_DB,
-        host=settings.MONGODB_HOST,
-        port=settings.MONGODB_PORT
-    )
+    connect(host=settings.MONGODB_URI)
 
     # Import and register routers
     from app.api.routes import router as api_router

@@ -17,18 +17,8 @@ class Settings(BaseSettings):
     BASE_DIR: ClassVar[Path] = Path(__file__).resolve().parent.parent.parent
     UPLOAD_DIR: ClassVar[Path] = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
     DICOM_DIR: ClassVar[Path] = Path(os.getenv("DICOM_DIR", BASE_DIR / "dicom_files"))
-    
-    # PACS configuration
-    PACS_HOST: str = os.getenv("PACS_HOST", "127.0.0.1")
-    PACS_PORT: int = int(os.getenv("PACS_PORT", "8000"))
-    AE_TITLE: str = os.getenv("AE_TITLE", "AICLINIC")
-    PACS_AE_TITLE: str = os.getenv("PACS_AE_TITLE", "PACS")
-    
     # MongoDB configuration
-    MONGODB_HOST: str = os.getenv("MONGODB_HOST", "localhost")
-    MONGODB_PORT: int = int(os.getenv("MONGODB_PORT", "27017"))
-    MONGODB_DB: str = os.getenv("MONGODB_DB", "aiclinic")
-    MONGODB_URI: str = os.getenv("MONGODB_URI", f"mongodb://{MONGODB_HOST}:{MONGODB_PORT}/{MONGODB_DB}")
+    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017/aiclinic")
     
     # JWT settings
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key")
