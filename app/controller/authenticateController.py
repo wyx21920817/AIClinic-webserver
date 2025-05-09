@@ -32,7 +32,11 @@ async def verify_token(authorization: str = Header(None)):
             raise HTTPException(status_code=401, detail="Token has expired")
             
         # token验证成功
-        return {"valid": True, "message": "Token is valid"}
+        return {
+                "authorized": True,
+                "labels": ["all", "view", "upload", "modify"],
+                "user": "admin"
+                }
         
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
