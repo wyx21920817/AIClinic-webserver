@@ -36,11 +36,13 @@ async def verify_token(authorization: str = Header(None)):
         return JSONResponse(
             status_code=200,
             content={
+                "granted": True,  # 必需字段，表示是否授予访问权限
+                "validity": 3600,  # 缓存有效期，单位为秒
                 "authorized": True,
                 "labels": ["all", "view", "upload", "modify"],
                 "user": "admin"
             }
-)
+        )
         
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
