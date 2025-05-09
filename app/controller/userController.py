@@ -77,6 +77,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     """Validate JWT token and return current user"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # 检查是否是临时token
+        if payload.get('temp', False):
+            raise HTTPException(
+                status_code=401,
+                detail="Temporary tokens cannot be used for user authentication"
+            )
+            
+        # 检查sub字段
+        if "sub" not in payload:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token content - missing user identifier"
+            )
+            
         user = User.objects(id=payload["sub"]).first()
         if user is None:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")
