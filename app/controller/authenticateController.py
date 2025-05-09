@@ -37,14 +37,14 @@ async def verify_token(authorization: str = Header(None)):
             return Response(status_code=401)
             
         # 检查是否是临时token
-        if payload.get('temp', False):
-            # 临时token拥有所有权限，不需要查询数据库
+        if payload.get('temp', False) and payload.get('orthanc_access', False):
+            # 临时token拥有所有权限
             return Response(
                 content=json.dumps({
                     "granted": True,
                     "validity": 60,  # 临时token只缓存1分钟
                     "labels": ["view", "upload", "modify", "all"],  # 所有权限
-                    "user": "temp_user",
+                    "user": "orthanc_temp_access",  # 使用更明确的用户标识
                     "is_temp": True  # 标记这是一个临时token
                 }),
                 media_type="application/json",
@@ -104,9 +104,8 @@ async def get_temp_token():
         payload = {
             'exp': datetime.utcnow() + timedelta(minutes=1),  # 1分钟后过期
             'iat': datetime.utcnow(),
-            'sub': 'temp_user',  # 临时用户标识
-            'role': 'temp_admin',  # 给予管理员权限
-            'temp': True  # 标记为临时token
+            'temp': True,  # 标记为临时token
+            'orthanc_access': True  # 标记这是用于Orthanc访问的token
         }
         
         # 生成token
