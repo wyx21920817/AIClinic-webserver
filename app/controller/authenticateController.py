@@ -54,10 +54,14 @@ async def verify_token(authorization: str = Header(None)):
             "user": "admin"
         }
 
+        content = json.dumps(payload)
         return Response(
-            content=json.dumps(payload),
+            content=content,
             media_type="application/json",
-            headers={"Content-Length": str(len(json.dumps(payload)))}
+            headers={
+                "Content-Length": str(len(content)),
+                "Connection": "close"
+            }
         )
 
 
