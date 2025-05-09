@@ -125,7 +125,7 @@ async def get_ecg_files(
     responses = []
     for ecg_file in ecg_files:
         # Get instance details from Orthanc
-        instance_details = get_instance(ecg_file.dicom_uid)
+        instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         if instance_details:
             responses.append(ECGFileResponse(
                 file_id=str(ecg_file.id),
@@ -179,7 +179,7 @@ async def get_ecg_file(
     
         if download:
             # Get raw DICOM data
-            dicom_data = get_instance_dicom(ecg_file.dicom_uid)
+            dicom_data = get_instance_dicom(ecg_file.dicom_uid, token=current_user.token)
             if not dicom_data:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -195,7 +195,7 @@ async def get_ecg_file(
             
         if waveform:
             # Get waveform data
-            waveform_data = get_instance_waveform(ecg_file.dicom_uid)
+            waveform_data = get_instance_waveform(ecg_file.dicom_uid, token=current_user.token)
             if not waveform_data:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -204,7 +204,7 @@ async def get_ecg_file(
             return JSONResponse(content=waveform_data)
         
         # Get instance details from Orthanc
-        instance_details = get_instance(ecg_file.dicom_uid)
+        instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         if not instance_details:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -263,7 +263,7 @@ async def update_ecg_file(
         "Notes": notes,
         "Tags": ",".join(tag_list)
     }
-    if not modify_instance_metadata(ecg_file.dicom_uid, metadata):
+    if not modify_instance_metadata(ecg_file.dicom_uid, metadata, token=current_user.token):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update file metadata on server"
@@ -275,7 +275,7 @@ async def update_ecg_file(
     ecg_file.save()
     
     # Get updated instance details
-    instance_details = get_instance(ecg_file.dicom_uid)
+    instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
     
     return ECGFileResponse(
         file_id=str(ecg_file.id),
@@ -327,7 +327,7 @@ async def delete_ecg_file(
         # Then try to delete from Orthanc server
         # Even if this fails, we don't rollback the database deletion
         try:
-            delete_instance(dicom_uid)
+            delete_instance(dicom_uid, token=current_user.token)
         except Exception as e:
             print(f"Warning: Failed to delete from Orthanc server: {str(e)}")
             # Don't raise exception here, as the file is already deleted from database
@@ -394,7 +394,7 @@ async def upload_ecg_file(
 
         try:
             # 上传到Orthanc服务器
-            orthanc_response = upload_dicom_file(temp_path)
+            orthanc_response = upload_dicom_file(temp_path, token=current_user.token)
             if not orthanc_response:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

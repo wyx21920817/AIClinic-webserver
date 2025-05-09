@@ -69,5 +69,8 @@ def create_app():
     from app.controller.ecgController import router as ecg_router
     app.include_router(ecg_router)
 
+    from app.controller.authenticateController import router as authenticate_router
+    app.include_router(authenticate_router)
+
 
     return app

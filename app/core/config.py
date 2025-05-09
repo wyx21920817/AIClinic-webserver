@@ -9,6 +9,11 @@ from pydantic import ConfigDict
 load_dotenv()
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(
+        extra='allow',  # 允许额外的字段
+        env_file='.env'  # 指定环境变量文件
+    )
+
     # Server settings
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
@@ -17,6 +22,10 @@ class Settings(BaseSettings):
     BASE_DIR: ClassVar[Path] = Path(__file__).resolve().parent.parent.parent
     UPLOAD_DIR: ClassVar[Path] = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
     DICOM_DIR: ClassVar[Path] = Path(os.getenv("DICOM_DIR", BASE_DIR / "dicom_files"))
+    
+    # AI Server settings
+    aiserver_uri: str = os.getenv("AISERVER_URI", "http://localhost:9000")
+    
     # MongoDB configuration
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017/aiclinic")
     
@@ -36,9 +45,5 @@ class Settings(BaseSettings):
         # Create necessary directories
         self.UPLOAD_DIR.mkdir(exist_ok=True)
         self.DICOM_DIR.mkdir(exist_ok=True)
-
-    class Config:
-        env_file = ".env"
-        model_config = ConfigDict(extra='allow')  # 允许额外的字段
 
 settings = Settings()
