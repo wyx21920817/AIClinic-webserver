@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import JSONResponse
 import jwt
 from datetime import datetime, timedelta
 import os
@@ -32,11 +33,14 @@ async def verify_token(authorization: str = Header(None)):
             raise HTTPException(status_code=401, detail="Token has expired")
             
         # token验证成功
-        return {
+        return JSONResponse(
+            status_code=200,
+            content={
                 "authorized": True,
                 "labels": ["all", "view", "upload", "modify"],
                 "user": "admin"
-                }
+            }
+)
         
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
