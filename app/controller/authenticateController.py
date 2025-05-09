@@ -19,6 +19,7 @@ JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 async def verify_token(authorization: str = Header(None)):
     """
     验证JWT token的端点，供Orthanc回调使用
+    支持验证普通token和临时token
     """
     if not authorization:
         return Response(status_code=401)
@@ -35,7 +36,24 @@ async def verify_token(authorization: str = Header(None)):
         if exp and datetime.utcnow().timestamp() > exp:
             return Response(status_code=401)
             
-        # 根据用户角色返回不同的权限
+        # 检查是否是临时token
+        if payload.get('temp', False):
+            # 临时token拥有所有权限
+            return Response(
+                content=json.dumps({
+                    "granted": True,
+                    "validity": 60,  # 临时token只缓存1分钟
+                    "labels": ["view", "upload", "modify", "all"],  # 所有权限
+                    "user": "temp_user"
+                }),
+                media_type="application/json",
+                headers={
+                    "Content-Type": "application/json",
+                    "Connection": "close"
+                }
+            )
+            
+        # 普通token的验证逻辑
         role = payload.get('role', '')
         labels = ["view"]  # 基本查看权限
         
@@ -51,7 +69,7 @@ async def verify_token(authorization: str = Header(None)):
         return Response(
             content=json.dumps({
                 "granted": True,
-                "validity": 3600,  # 缓存1小时
+                "validity": 3600,  # 普通token缓存1小时
                 "labels": labels,  # 用户权限标签
                 "user": payload.get('sub', 'unknown')  # 用户ID
             }),
@@ -68,3 +86,32 @@ async def verify_token(authorization: str = Header(None)):
     except Exception as e:
         print(f"Token verification error: {str(e)}")
         return Response(status_code=401)
+
+@router.get('/temp-token')
+async def get_temp_token():
+    """
+    生成一个有效期为1分钟的临时token，具有查询和修改Orthanc文件的权限
+    """
+    try:
+        # 创建token payload
+        payload = {
+            'exp': datetime.utcnow() + timedelta(minutes=1),  # 1分钟后过期
+            'iat': datetime.utcnow(),
+            'sub': 'temp_user',  # 临时用户标识
+            'role': 'temp_admin',  # 给予管理员权限
+            'temp': True  # 标记为临时token
+        }
+        
+        # 生成token
+        token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
+        
+        return JSONResponse(
+            content={
+                "token": token,
+                "expires_in": 60,  # 60秒
+                "token_type": "Bearer"
+            },
+            status_code=200
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
