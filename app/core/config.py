@@ -11,7 +11,8 @@ load_dotenv()
 class Settings(BaseSettings):
     model_config = ConfigDict(
         extra='allow',  # 允许额外的字段
-        env_file='.env'  # 指定环境变量文件
+        env_file='.env',  # 指定环境变量文件
+        case_sensitive=True  # 大小写敏感
     )
 
     # Server settings
@@ -55,8 +56,5 @@ class Settings(BaseSettings):
         # Create necessary directories
         self.UPLOAD_DIR.mkdir(exist_ok=True)
         self.DICOM_DIR.mkdir(exist_ok=True)
-
-    class Config:
-        case_sensitive = True
 
 settings = Settings()
