@@ -20,7 +20,8 @@ def get_headers(token):
     """
     if not token:
         raise ValueError("Token is required for Orthanc API calls")
-        
+    
+    print(f"Using token for Orthanc API: {token}")  # Debug token
     return {
         'Authorization': f"Bearer {token}",
         'Accept': 'application/json'
@@ -49,18 +50,20 @@ def upload_dicom_file(file_path, token):
         headers = get_headers(token)
         headers['Content-Type'] = 'application/dicom'
         
+        print(f"Sending request to Orthanc with headers: {headers}")  # Debug headers
+        
         response = requests.post(
-            f"{ORTHANC_SERVER_URL}/api/instances",
+            f"{ORTHANC_SERVER_URL}/instances",
             headers=headers,
             data=dicom_content,
-            verify=False
+            verify=False  # 如果是自签名证书，可能需要这个
         )
         
-        print(f"Upload response status: {response.status_code}")
-        print(f"Upload response headers: {response.headers}")
-        print(f"Upload response text: {response.text}")
+        print(f"Upload response status: {response.status_code}")  # Debug
+        print(f"Upload response headers: {response.headers}")  # Debug
+        print(f"Upload response text: {response.text}")  # Debug
         
-        if response.status_code in [200, 201]:
+        if response.status_code in [200, 201]:  # 接受 200 或 201
             return response.json()
         else:
             print(f"Error uploading DICOM file: {response.status_code}")
@@ -70,7 +73,7 @@ def upload_dicom_file(file_path, token):
     except Exception as e:
         print(f"Error uploading DICOM file: {str(e)}")
         import traceback
-        print(f"Full error: {traceback.format_exc()}")
+        print(f"Full error: {traceback.format_exc()}")  # 添加完整的错误追踪
         return None
 
 def upload_dicom_folder(folder_path, token):
