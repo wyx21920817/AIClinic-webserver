@@ -38,13 +38,14 @@ async def verify_token(authorization: str = Header(None)):
             
         # 检查是否是临时token
         if payload.get('temp', False):
-            # 临时token拥有所有权限
+            # 临时token拥有所有权限，不需要查询数据库
             return Response(
                 content=json.dumps({
                     "granted": True,
                     "validity": 60,  # 临时token只缓存1分钟
                     "labels": ["view", "upload", "modify", "all"],  # 所有权限
-                    "user": "temp_user"
+                    "user": "temp_user",
+                    "is_temp": True  # 标记这是一个临时token
                 }),
                 media_type="application/json",
                 headers={
@@ -52,6 +53,11 @@ async def verify_token(authorization: str = Header(None)):
                     "Connection": "close"
                 }
             )
+        
+        # 如果不是临时token，则需要验证用户是否存在
+        sub = payload.get('sub')
+        if not sub:
+            return Response(status_code=401)
             
         # 普通token的验证逻辑
         role = payload.get('role', '')
@@ -71,7 +77,8 @@ async def verify_token(authorization: str = Header(None)):
                 "granted": True,
                 "validity": 3600,  # 普通token缓存1小时
                 "labels": labels,  # 用户权限标签
-                "user": payload.get('sub', 'unknown')  # 用户ID
+                "user": sub,  # 用户ID
+                "is_temp": False  # 标记这不是临时token
             }),
             media_type="application/json",
             headers={
