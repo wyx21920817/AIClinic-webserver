@@ -22,7 +22,8 @@ def get_headers(token):
         raise ValueError("Token is required for Orthanc API calls")
         
     return {
-        'Authorization': f"Bearer {token}"
+        'Authorization': f"Bearer {token}",
+        'Accept': 'application/json'
     }
 
 def upload_dicom_file(file_path, token):
@@ -49,12 +50,17 @@ def upload_dicom_file(file_path, token):
         headers['Content-Type'] = 'application/dicom'
         
         response = requests.post(
-            f"{ORTHANC_SERVER_URL}/instances",
+            f"{ORTHANC_SERVER_URL}/api/instances",
             headers=headers,
-            data=dicom_content
+            data=dicom_content,
+            verify=False
         )
         
-        if response.status_code == 200:
+        print(f"Upload response status: {response.status_code}")
+        print(f"Upload response headers: {response.headers}")
+        print(f"Upload response text: {response.text}")
+        
+        if response.status_code in [200, 201]:
             return response.json()
         else:
             print(f"Error uploading DICOM file: {response.status_code}")
@@ -63,6 +69,8 @@ def upload_dicom_file(file_path, token):
             
     except Exception as e:
         print(f"Error uploading DICOM file: {str(e)}")
+        import traceback
+        print(f"Full error: {traceback.format_exc()}")
         return None
 
 def upload_dicom_folder(folder_path, token):
