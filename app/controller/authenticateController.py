@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Header, HTTPException, JSONResponse
-from fastapi.responses import Response
+from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import JSONResponse
 import jwt
 from datetime import datetime, timedelta
 import os
-import json
 
 router = APIRouter(
     prefix="/api/auth",
@@ -13,8 +12,8 @@ router = APIRouter(
 # 从环境变量获取密钥，实际使用时应该配置在环境变量中
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 
-@router.get('/verify-token')
-@router.post('/verify-token')
+@router.get('/verify-token')  # 改为 GET 方法
+@router.post('/verify-token')  # 保留 POST 方法以保持向后兼容
 async def verify_token(authorization: str = Header(None)):
     """
     验证JWT token的端点，供Orthanc回调使用
