@@ -23,7 +23,7 @@ def get_headers(token):
     
     print(f"Using token for Orthanc API: {token}")  # Debug token
     return {
-        'Authorization': f"Bearer {token}",
+        'Authorization': token if token.startswith('Basic ') else f"Bearer {token}",  # 支持 Basic 认证
         'Accept': 'application/json'
     }
 
@@ -52,6 +52,28 @@ def upload_dicom_file(file_path, token):
         
         print(f"Sending request to Orthanc with headers: {headers}")  # Debug headers
         
+        # 尝试先验证token
+        verify_response = requests.get(
+            f"{ORTHANC_SERVER_URL}/system",
+            headers=headers,
+            verify=False
+        )
+        print(f"Verify response status: {verify_response.status_code}")  # Debug
+        print(f"Verify response headers: {verify_response.headers}")  # Debug
+        print(f"Verify response text: {verify_response.text}")  # Debug
+        
+        # 如果验证失败，尝试使用 Basic 认证
+        if verify_response.status_code == 401:
+            print("Trying Basic auth...")
+            headers['Authorization'] = 'Basic b3J0aGFuYzpvcnRoYW5j'  # orthanc:orthanc in base64
+            verify_response = requests.get(
+                f"{ORTHANC_SERVER_URL}/system",
+                headers=headers,
+                verify=False
+            )
+            print(f"Basic auth verify response status: {verify_response.status_code}")  # Debug
+        
+        # 上传文件
         response = requests.post(
             f"{ORTHANC_SERVER_URL}/instances",
             headers=headers,
