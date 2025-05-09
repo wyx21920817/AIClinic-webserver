@@ -6,7 +6,8 @@ from io import BytesIO
 import numpy as np
 from app.core.config import settings
 
-ORTHANC_SERVER_URL = "http://54.79.224.136:8042"
+# 从配置中获取 Orthanc 服务器 URL
+ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 
 def get_headers(token):
     """

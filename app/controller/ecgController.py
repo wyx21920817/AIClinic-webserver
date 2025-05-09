@@ -345,7 +345,7 @@ async def delete_ecg_file(
             detail=f"Failed to delete file: {str(e)}"
         )
 
-@router.post("/{user_id}/files")
+@router.post("/{user_id}/files", response_model=UploadResponse)
 async def upload_ecg_file(
     request: Request,
     user_id: str,

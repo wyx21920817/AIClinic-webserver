@@ -33,17 +33,30 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key")
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "60000"))  # JWT token 过期时间（分钟）
     MFA_EXPIRE_MINUTES: int = int(os.getenv("MFA_EXPIRE_MINUTES", "50000"))   # MFA验证码过期时间（分钟）
-
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
+    
     # SMTP settings
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "your-email")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "your-email-password")
 
+    # Orthanc settings
+    ORTHANC_SERVER_URL: str = os.getenv('ORTHANC_SERVER_URL', 'http://127.0.0.1:8042')
+
+    # Logging settings
+    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_FORMAT: str = '%(asctime)s [%(levelname)s] %(name)s - %(message)s'
+    LOG_DATE_FORMAT: str = '%Y-%m-%d %H:%M:%S'
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Create necessary directories
         self.UPLOAD_DIR.mkdir(exist_ok=True)
         self.DICOM_DIR.mkdir(exist_ok=True)
+
+    class Config:
+        case_sensitive = True
 
 settings = Settings()
