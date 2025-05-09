@@ -8,7 +8,8 @@ import json
 
 router = APIRouter(
     prefix="/api/auth",
-    tags=["authentication"]
+    tags=["authentication"],
+    dependencies=[]  # 移除全局依赖，让每个端点单独指定依赖
 )
 
 # 从环境变量获取密钥，实际使用时应该配置在环境变量中
