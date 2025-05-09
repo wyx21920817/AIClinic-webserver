@@ -21,7 +21,7 @@ async def verify_token(authorization: str = Header(None)):
     验证JWT token的端点，供Orthanc回调使用
     """
     if not authorization:
-        raise HTTPException(status_code=401, detail="No token provided")
+        return Response(status_code=401)
     
     try:
         # 通常Authorization header的格式是"Bearer <token>"
@@ -33,41 +33,38 @@ async def verify_token(authorization: str = Header(None)):
         # 检查token是否过期
         exp = payload.get('exp')
         if exp and datetime.utcnow().timestamp() > exp:
-            raise HTTPException(status_code=401, detail="Token has expired")
+            return Response(status_code=401)
             
-        # token验证成功
-        # return JSONResponse(
-        #     status_code=200,
-        #     content={
-        #         "granted": True,  # 必需字段，表示是否授予访问权限
-        #         "validity": 3600,  # 缓存有效期，单位为秒
-        #         "authorized": True,
-        #         "labels": ["all", "view", "upload", "modify"],
-        #         "user": "admin"
-        #     }
-        # )
-        payload = {
-            "granted": True,
-            "validity": 3600,
-            "authorized": True,
-            "labels": ["all", "view", "upload", "modify"],
-            "user": "admin"
-        }
-
-        content = json.dumps(payload)
+        # 根据用户角色返回不同的权限
+        role = payload.get('role', '')
+        labels = ["view"]  # 基本查看权限
+        
+        # 医生和管理员都可以上传
+        if role in ['doctor', 'admin']:
+            labels.append("upload")
+        
+        # 只有管理员有全部权限
+        if role == 'admin':
+            labels.extend(["all", "modify"])
+            
+        # 返回Orthanc期望的响应格式
         return Response(
-            content=content,
+            content=json.dumps({
+                "granted": True,
+                "validity": 3600,  # 缓存1小时
+                "labels": labels,  # 用户权限标签
+                "user": payload.get('sub', 'unknown')  # 用户ID
+            }),
             media_type="application/json",
             headers={
-                "Content-Length": str(len(content)),
-                "Connection": "close"
+                "Content-Type": "application/json",
+                "Connection": "close"  # 明确关闭连接，避免连接池问题
             }
         )
-
-
-        
-        
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
+        return Response(status_code=401)
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        return Response(status_code=401)
+    except Exception as e:
+        print(f"Token verification error: {str(e)}")
+        return Response(status_code=401)
