@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, JSONResponse
 from fastapi.responses import Response
 import jwt
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ router = APIRouter(
 # 从环境变量获取密钥，实际使用时应该配置在环境变量中
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 
+@router.get('/verify-token')
 @router.post('/verify-token')
 async def verify_token(authorization: str = Header(None)):
     """
@@ -34,16 +35,16 @@ async def verify_token(authorization: str = Header(None)):
             raise HTTPException(status_code=401, detail="Token has expired")
             
         # token验证成功
-        return Response(
-    content=json.dumps({
-         "granted": True,  # 必需字段，表示是否授予访问权限
+        return JSONResponse(
+            status_code=200,
+            content={
+                "granted": True,  # 必需字段，表示是否授予访问权限
                 "validity": 3600,  # 缓存有效期，单位为秒
                 "authorized": True,
                 "labels": ["all", "view", "upload", "modify"],
                 "user": "admin"
-    }),
-    media_type="application/json"
-)
+            }
+        )
         
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
