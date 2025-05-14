@@ -10,6 +10,7 @@ class EcgFile(Document):
     tags = ListField(StringField(), default=list)
     notes = StringField()
     diagnosis_result = DictField(default={})
+    instanceIDs = ListField(StringField(), default=list)  # Store all related instance IDs
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
 

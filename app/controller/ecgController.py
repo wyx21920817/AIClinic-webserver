@@ -41,7 +41,8 @@ class ECGFileResponse(BaseModel):
     notes: str
     tags: List[str]
     dicom_uid: str
-    content:str
+    content: str
+    instanceIDs: List[str]
 
     class Config:
         json_schema_extra = {
@@ -135,7 +136,8 @@ async def get_ecg_files(
                 notes=ecg_file.notes,
                 tags=ecg_file.tags,
                 dicom_uid=ecg_file.dicom_uid,
-                content=str(instance_details)  # Convert to string to ensure it can be serialized
+                content=str(instance_details),  # Convert to string to ensure it can be serialized
+                instanceIDs=ecg_file.instanceIDs
             ))
     
     return responses
@@ -271,16 +273,20 @@ async def update_ecg_file(
         }
         print(f"Updating Orthanc metadata: {metadata}")  # Debug
         
-        if not modify_instance_metadata(ecg_file.dicom_uid, metadata, token=current_user.token):
+        # Update Orthanc metadata and get current instances
+        result = modify_instance_metadata(ecg_file.dicom_uid, metadata, token=current_user.token)
+        if not result:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update file metadata on server"
             )
         print("Successfully updated Orthanc metadata")  # Debug
         
-        # Update database
+        # Update database with new metadata and instance list
         ecg_file.notes = notes
         ecg_file.tags = tag_list
+        ecg_file.instanceIDs = result['current_instances']  # Update instanceIDs with current list
+        ecg_file.dicom_uid = result['instance_id']  # Update to new instance ID
         ecg_file.save()
         print("Successfully updated database record")  # Debug
         
@@ -288,6 +294,11 @@ async def update_ecg_file(
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         print(f"Retrieved instance details from Orthanc: {instance_details}")  # Debug
         
+        # 确保instanceIDs字段存在
+        if not hasattr(ecg_file, 'instanceIDs') or ecg_file.instanceIDs is None:
+            ecg_file.instanceIDs = [ecg_file.dicom_uid]
+            ecg_file.save()
+            
         return ECGFileResponse(
             file_id=str(ecg_file.id),
             user_id=user_id,
@@ -296,7 +307,8 @@ async def update_ecg_file(
             notes=notes,
             tags=tag_list,
             dicom_uid=ecg_file.dicom_uid,
-            content=str(instance_details)  # Adding content field to match model
+            content=str(instance_details),  # Adding content field to match model
+            instanceIDs=ecg_file.instanceIDs
         )
     except Exception as e:
         print(f"Error in update_ecg_file: {str(e)}")  # Debug
@@ -437,13 +449,31 @@ async def upload_ecg_file(
                     detail="patient _NOT_FOUND"
                 )
                 
-            ecg_file = EcgFile(
-                patient_id=patient,
-                dicom_uid=dicom_uid,
-                uploaded_by=current_user,
-                tags=tag_list,
-                notes=notes
-            )
+            # Get current instances for this patient
+            existing_ecg = EcgFile.objects(patient_id=patient).first()
+            current_instances = []
+            if existing_ecg and existing_ecg.instanceIDs:
+                current_instances = existing_ecg.instanceIDs
+            
+            # Add new instance ID
+            if dicom_uid not in current_instances:
+                current_instances.append(dicom_uid)
+            
+            # Create or update ECG file record
+            if existing_ecg:
+                existing_ecg.tags = tag_list
+                existing_ecg.notes = notes
+                existing_ecg.instanceIDs = current_instances
+                ecg_file = existing_ecg
+            else:
+                ecg_file = EcgFile(
+                    patient_id=patient,
+                    dicom_uid=dicom_uid,
+                    uploaded_by=current_user,
+                    tags=tag_list,
+                    notes=notes,
+                    instanceIDs=current_instances
+                )
             ecg_file.save()
             
             return {
@@ -454,7 +484,8 @@ async def upload_ecg_file(
                 "original_filename": file.filename,
                 "notes": notes,
                 "tags": tag_list,
-                "dicom_uid": dicom_uid
+                "dicom_uid": dicom_uid,
+                "instanceIDs": current_instances
             }
         finally:
             # 清理临时文件

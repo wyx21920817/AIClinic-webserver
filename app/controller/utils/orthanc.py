@@ -218,6 +218,13 @@ def modify_instance_metadata(instance_id, metadata, token):
         if instances_response.status_code == 200:
             print(f"Current instances after modify: {instances_response.json()}")
         
+        # 检查修改是否成功
+        if response.status_code != 200:
+            print(f"Failed to modify instance metadata: {response.status_code}")
+            return None
+            
+        print("Successfully modified instance metadata, uploading modified instance...")
+        
         # 尝试直接把返回的 DICOM 数据上传为新实例
         upload_url = f"{ORTHANC_SERVER_URL}/instances"
         upload_headers = headers.copy()
@@ -227,26 +234,32 @@ def modify_instance_metadata(instance_id, metadata, token):
             headers=upload_headers,
             data=response.content
         )
-        print(f"Upload response status: {upload_response.status_code}")
-        if upload_response.status_code == 200:
-            print(f"Upload response content: {upload_response.json()}")
-            
-            # 再看看上传后的实例列表
-            instances_response = requests.get(instances_url, headers=headers)
-            if instances_response.status_code == 200:
-                print(f"Current instances after upload: {instances_response.json()}")
-                
-            try:
-                result = upload_response.json()
-                new_instance_id = result.get('ID') or result.get('ParentPatient') or result.get('ParentStudy') or result.get('ParentSeries')
-                if new_instance_id:
-                    print(f"Successfully created new instance: {new_instance_id}")
-                    return new_instance_id
-            except Exception as e:
-                print(f"Error parsing upload response: {str(e)}")
         
-        print("Failed to create new instance")
-        return None
+        if upload_response.status_code != 200:
+            print(f"Failed to upload modified instance: {upload_response.status_code}")
+            return None
+            
+        print(f"Upload response content: {upload_response.json()}")
+        
+        # 获取当前所有实例列表
+        instances_response = requests.get(instances_url, headers=headers)
+        current_instances = []
+        if instances_response.status_code == 200:
+            current_instances = instances_response.json()
+            print(f"Current instances after upload: {current_instances}")
+            
+        try:
+            result = upload_response.json()
+            new_instance_id = result.get('ID')
+            if new_instance_id:
+                print(f"Successfully created new instance: {new_instance_id}")
+                return {
+                    'instance_id': new_instance_id,
+                    'current_instances': current_instances
+                }
+        except Exception as e:
+            print(f"Error parsing upload response: {str(e)}")
+            return None
         
     except Exception as e:
         print(f"Error modifying instance tags: {str(e)}")
