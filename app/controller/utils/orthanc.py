@@ -161,31 +161,98 @@ def get_instance_dicom(instance_id, token):
 
 def modify_instance_metadata(instance_id, metadata, token):
     """
-    Modify instance metadata in Orthanc server.
+    Modify DICOM tags of an instance in Orthanc server using the /modify endpoint.
+    Creates a new instance with modified tags while keeping the original instance unchanged.
     
     Args:
         instance_id (str): The Orthanc instance ID
-        metadata (dict): Dictionary containing metadata to modify
+        metadata (dict): Dictionary containing metadata (notes and tags)
         token (str): JWT token for authentication
         
     Returns:
-        bool: True if successful, False otherwise
+        str: New instance ID if successful, None otherwise
     """
     try:
         headers = get_headers(token)
         headers['Content-Type'] = 'application/json'
         
-        response = requests.put(
-            f"{ORTHANC_SERVER_URL}/instances/{instance_id}/metadata",
+        # 使用私有 tags 来存储自定义信息
+        dicom_tags = {
+           
+            "0009,1010": metadata.get('Notes', ''),  # 私有tag存储Notes
+            "0009,1011": metadata.get('Tags', ''),   # 私有tag存储Tags
+            "0020,4000": metadata.get('Notes', '')   # 同时存在ImageComments中以便兼容
+        }
+        
+        url = f"{ORTHANC_SERVER_URL}/instances/{instance_id}/modify"
+        print(f"Modifying instance tags at: {url}")
+        print(f"Headers: {headers}")
+        print(f"DICOM tags to modify: {dicom_tags}")
+        
+        request_data = {
+            "Replace": dicom_tags,
+            "Force": True,
+            "KeepSource": True,
+            "PrivateCreator": "WebServer", 
+        }
+        
+        # 先看看修改前的实例列表
+        instances_url = f"{ORTHANC_SERVER_URL}/instances"
+        instances_response = requests.get(instances_url, headers=headers)
+        if instances_response.status_code == 200:
+            print(f"Current instances before modify: {instances_response.json()}")
+        
+        response = requests.post(
+            url,
             headers=headers,
-            json=metadata
+            json=request_data
         )
         
-        return response.status_code == 200
+        print(f"Response status code: {response.status_code}")
+        print(f"Response headers: {response.headers}")
+        print(f"Response content length: {len(response.content)}")
+        print(f"First 200 bytes of response: {response.content[:200]}")
+        
+        # 再看看修改后的实例列表
+        instances_response = requests.get(instances_url, headers=headers)
+        if instances_response.status_code == 200:
+            print(f"Current instances after modify: {instances_response.json()}")
+        
+        # 尝试直接把返回的 DICOM 数据上传为新实例
+        upload_url = f"{ORTHANC_SERVER_URL}/instances"
+        upload_headers = headers.copy()
+        upload_headers['Content-Type'] = 'application/dicom'
+        upload_response = requests.post(
+            upload_url,
+            headers=upload_headers,
+            data=response.content
+        )
+        print(f"Upload response status: {upload_response.status_code}")
+        if upload_response.status_code == 200:
+            print(f"Upload response content: {upload_response.json()}")
+            
+            # 再看看上传后的实例列表
+            instances_response = requests.get(instances_url, headers=headers)
+            if instances_response.status_code == 200:
+                print(f"Current instances after upload: {instances_response.json()}")
+                
+            try:
+                result = upload_response.json()
+                new_instance_id = result.get('ID') or result.get('ParentPatient') or result.get('ParentStudy') or result.get('ParentSeries')
+                if new_instance_id:
+                    print(f"Successfully created new instance: {new_instance_id}")
+                    return new_instance_id
+            except Exception as e:
+                print(f"Error parsing upload response: {str(e)}")
+        
+        print("Failed to create new instance")
+        return None
         
     except Exception as e:
-        print(f"Error modifying metadata: {str(e)}")
-        return False
+        print(f"Error modifying instance tags: {str(e)}")
+        import traceback
+        print(f"Full error traceback: {traceback.format_exc()}")
+        return None
 
 def delete_instance(instance_id, token):
     """

@@ -245,47 +245,67 @@ async def update_ecg_file(
     - **notes**: Notes about the ECG recording
     - **tags**: Tags for categorization (comma-separated string)
     """
-    await check_user_access(user_id, current_user)
-    
-    # Get file from database
-    ecg_file = EcgFile.objects(id=file_id, patient_id=user_id).first()
-    if not ecg_file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ECG file not found"
+    try:
+        print(f"Updating ECG file - user_id: {user_id}, file_id: {file_id}")  # Debug
+        
+        await check_user_access(user_id, current_user)
+        
+        # Get file from database
+        print(f"Searching for ECG file in database...")  # Debug
+        ecg_file = EcgFile.objects(id=file_id, patient_id=user_id).first()
+        if not ecg_file:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ECG file not found"
+            )
+        print(f"Found ECG file with dicom_uid: {ecg_file.dicom_uid}")  # Debug
+        
+        # Convert tags string to list
+        tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
+        print(f"Processed tags: {tag_list}")  # Debug
+        
+        # Update Orthanc metadata
+        metadata = {
+            "Notes": notes,
+            "Tags": ",".join(tag_list)
+        }
+        print(f"Updating Orthanc metadata: {metadata}")  # Debug
+        
+        if not modify_instance_metadata(ecg_file.dicom_uid, metadata, token=current_user.token):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update file metadata on server"
+            )
+        print("Successfully updated Orthanc metadata")  # Debug
+        
+        # Update database
+        ecg_file.notes = notes
+        ecg_file.tags = tag_list
+        ecg_file.save()
+        print("Successfully updated database record")  # Debug
+        
+        # Get updated instance details
+        instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
+        print(f"Retrieved instance details from Orthanc: {instance_details}")  # Debug
+        
+        return ECGFileResponse(
+            file_id=str(ecg_file.id),
+            user_id=user_id,
+            filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+            created_at=ecg_file.created_at,
+            notes=notes,
+            tags=tag_list,
+            dicom_uid=ecg_file.dicom_uid,
+            content=str(instance_details)  # Adding content field to match model
         )
-    
-    # Convert tags string to list
-    tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
-    
-    # Update Orthanc metadata
-    metadata = {
-        "Notes": notes,
-        "Tags": ",".join(tag_list)
-    }
-    if not modify_instance_metadata(ecg_file.dicom_uid, metadata, token=current_user.token):
+    except Exception as e:
+        print(f"Error in update_ecg_file: {str(e)}")  # Debug
+        import traceback
+        print(f"Full error traceback: {traceback.format_exc()}")  # Debug
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update file metadata on server"
+            detail=f"Failed to update ECG file: {str(e)}"
         )
-    
-    # Update database
-    ecg_file.notes = notes
-    ecg_file.tags = tag_list
-    ecg_file.save()
-    
-    # Get updated instance details
-    instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
-    
-    return ECGFileResponse(
-        file_id=str(ecg_file.id),
-        user_id=user_id,
-        filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
-        created_at=ecg_file.created_at,
-        notes=notes,
-        tags=tag_list,
-        dicom_uid=ecg_file.dicom_uid
-    )
 
 @router.delete("/{user_id}/files/{file_id}")
 async def delete_ecg_file(
