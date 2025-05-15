@@ -5,29 +5,40 @@ from datetime import datetime, timedelta
 import os
 from fastapi.responses import Response
 import json
+import logging
 
 router = APIRouter(
     prefix="/api/auth",
     tags=["authentication"],
-    dependencies=[]  # 移除全局依赖，让每个端点单独指定依赖
+    dependencies=[]
 )
 
-# 从环境变量获取密钥，实际使用时应该配置在环境变量中
+# 配置日志记录器
+logger = logging.getLogger(__name__)
+
+# 从环境变量获取密钥
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 
-@router.get('/verify-token')  # 改为 GET 方法
-@router.post('/verify-token')  # 保留 POST 方法以保持向后兼容
+@router.get('/verify-token')
+@router.post('/verify-token')
 async def verify_token(authorization: str = Header(None)):
     """
     验证JWT token的端点，供Orthanc回调使用
     支持验证普通token和临时token
     """
+    logger.info(f"Received token verification request")
+    
     if not authorization:
-        return Response(status_code=401)
+        logger.warning("No authorization header provided")
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "No authorization header"}
+        )
     
     try:
-        # 通常Authorization header的格式是"Bearer <token>"
+        # 解析token
         token = authorization.split(' ')[1] if ' ' in authorization else authorization
+        logger.debug(f"Processing token verification")
         
         # 验证token
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
@@ -35,65 +46,69 @@ async def verify_token(authorization: str = Header(None)):
         # 检查token是否过期
         exp = payload.get('exp')
         if exp and datetime.utcnow().timestamp() > exp:
-            return Response(status_code=401)
-            
-        # 检查是否是临时token
-        if payload.get('temp', False) and payload.get('orthanc_access', False):
-            # 临时token拥有所有权限
-            return Response(
-                content=json.dumps({
-                    "granted": True,
-                    "validity": 60,  # 临时token只缓存1分钟
-                    "labels": ["view", "upload", "modify", "all"],  # 所有权限
-                    "user": "orthanc_temp_access",  # 使用更明确的用户标识
-                    "is_temp": True  # 标记这是一个临时token
-                }),
-                media_type="application/json",
-                headers={
-                    "Content-Type": "application/json",
-                    "Connection": "close"
-                }
+            logger.warning("Token has expired")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Token has expired"}
             )
         
-        # 如果不是临时token，则需要验证用户是否存在
+        # 构建基本响应
+        response_data = {
+            "granted": True,
+            "validity": 3600,  # 默认缓存1小时
+            "labels": ["view"],  # 基本查看权限
+            "user": payload.get('sub', 'unknown'),
+            "is_temp": False
+        }
+        
+        # 处理临时token
+        if payload.get('temp', False) and payload.get('orthanc_access', False):
+            response_data.update({
+                "validity": 60,  # 临时token只缓存1分钟
+                "labels": ["view", "upload", "modify", "all"],
+                "user": "orthanc_temp_access",
+                "is_temp": True
+            })
+            logger.info("Processed temporary token")
+            return JSONResponse(content=response_data)
+        
+        # 处理普通token
         sub = payload.get('sub')
         if not sub:
-            return Response(status_code=401)
-            
-        # 普通token的验证逻辑
+            logger.warning("Token missing subject claim")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid token structure"}
+            )
+        
+        # 设置权限
         role = payload.get('role', '')
-        labels = ["view"]  # 基本查看权限
-        
-        # 医生和管理员都可以上传
         if role in ['doctor', 'admin']:
-            labels.append("upload")
-        
-        # 只有管理员有全部权限
+            response_data['labels'].append("upload")
         if role == 'admin':
-            labels.extend(["all", "modify"])
-            
-        # 返回Orthanc期望的响应格式
-        return Response(
-            content=json.dumps({
-                "granted": True,
-                "validity": 3600,  # 普通token缓存1小时
-                "labels": labels,  # 用户权限标签
-                "user": sub,  # 用户ID
-                "is_temp": False  # 标记这不是临时token
-            }),
-            media_type="application/json",
-            headers={
-                "Content-Type": "application/json",
-                "Connection": "close"  # 明确关闭连接，避免连接池问题
-            }
-        )
+            response_data['labels'].extend(["all", "modify"])
+        
+        logger.info(f"Successful token verification for user {sub} with role {role}")
+        return JSONResponse(content=response_data)
+        
     except jwt.ExpiredSignatureError:
-        return Response(status_code=401)
-    except jwt.InvalidTokenError:
-        return Response(status_code=401)
+        logger.warning("Token signature has expired")
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Token has expired"}
+        )
+    except jwt.InvalidTokenError as e:
+        logger.warning(f"Invalid token: {str(e)}")
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid token"}
+        )
     except Exception as e:
-        print(f"Token verification error: {str(e)}")
-        return Response(status_code=401)
+        logger.error(f"Unexpected error in token verification: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"}
+        )
 
 @router.get('/temp-token')
 async def get_temp_token():
