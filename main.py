@@ -19,5 +19,6 @@ if __name__ == "__main__":
         host=settings.HOST,
         port=settings.PORT,
         reload=True,
+        workers=4,  # 增加工作进程数
         log_level="info"
     )
