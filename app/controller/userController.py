@@ -190,7 +190,7 @@ async def verify_mfa(
 
     # Generate JWT token
     access_token = create_access_token({"sub": str(user.id), "role": user.role.value})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id), "role": user.role.value, "username": user.username}
 
 @router.get("/users", response_model=List[UserResponse],
     summary="Get all users",
