@@ -42,10 +42,10 @@ def create_app():
     # Enable CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=["*"],  # Allow all origins
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["*"],  # Allow all methods
+        allow_headers=["*"],  # Allow all headers
     )
 
     # Mount static files

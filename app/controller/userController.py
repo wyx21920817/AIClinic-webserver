@@ -136,7 +136,6 @@ async def login(
 
     # Generate and save MFA code
     mfa_code = generate_mfa_code()
-    print(mfa_code)
     user.mfa_code = mfa_code
     user.mfa_expires_at = datetime.utcnow() + timedelta(minutes=settings.MFA_EXPIRE_MINUTES)
     user.save()
