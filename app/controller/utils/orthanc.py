@@ -447,6 +447,56 @@ def get_instance_tags(instance_id, token):
         print(f"Error getting tags: {str(e)}")
         return None
 
+def search_patients(query: str, token: str):
+    """
+    Search for patients in Orthanc PACS server by ID or name.
+    
+    Args:
+        query (str): Search query for patient ID or name
+        token (str): JWT token for authentication
+        
+    Returns:
+        list: List of matching patient records
+    """
+    try:
+        headers = get_headers(token)
+        headers['Content-Type'] = 'application/json'
+        
+        # 如果没有查询参数，获取所有患者
+        if not query:
+            response = requests.get(
+                f"{ORTHANC_SERVER_URL}/patients?expand",
+                headers=headers
+            )
+            if response.status_code == 200:
+                return response.json()
+            return []
+
+        # 如果有查询参数，先获取所有患者然后在代码中过滤
+        response = requests.get(
+            f"{ORTHANC_SERVER_URL}/patients?expand",
+            headers=headers
+        )
+        
+        if response.status_code != 200:
+            return []
+            
+        all_patients = response.json()
+        query = query.lower()
+        
+        # 在代码中进行模糊匹配
+        return [p for p in all_patients if 
+                (p.get('MainDicomTags', {}).get('PatientID', '').lower().find(query) != -1) or
+                (p.get('MainDicomTags', {}).get('PatientName', '').lower().find(query) != -1)]
+        
+
+            
+    except Exception as e:
+        print(f"Error searching patients: {str(e)}")
+        import traceback
+        print(f"Full error: {traceback.format_exc()}")
+        return []
+
 def get_instance_waveform(instance_id, token):
     """
     Get ECG waveform data from a DICOM instance.

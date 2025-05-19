@@ -1,6 +1,12 @@
+import requests
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Query
 from typing import List, Optional
 from datetime import datetime
+from typing import Optional, List
+from app.controller.utils.orthanc import get_headers
+from app.core.config import settings
+
+ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 from ..model.user import User, UserRole
 from ..model.patient import Patient, Gender
 from ..model.doctor_patient import DoctorPatient
@@ -228,6 +234,32 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
 
     patient.delete()
     return {"message": "Patient deleted successfully"}
+
+@router.get("/orthanc/patients/search",
+    summary="Search patients in Orthanc",
+    description="Search patients in Orthanc PACS server by ID or name.")
+async def search_orthanc_patients(
+    query: str = Query(None, description="Patient ID or name to search for"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Search for patients in Orthanc PACS server.
+    Supports fuzzy search by patient ID or name.
+    """
+    from app.controller.utils.orthanc import search_patients
+    
+    try:
+        results = search_patients(query, current_user.token)
+        if not results and isinstance(results, list):
+            return {"patients": [], "total": 0}
+            
+        return {"patients": results, "total": len(results)}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching patients in Orthanc: {str(e)}"
+        )
 
 @router.post("/doctors/patients/{patient_id}",
     summary="Add patient to doctor's list",

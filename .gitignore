@@ -30,6 +30,7 @@ tests/
 .vscode/
 *.swp
 *.swo
+*.pt
 
 # Logs
 logs/
