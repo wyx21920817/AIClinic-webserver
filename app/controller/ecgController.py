@@ -14,8 +14,8 @@ from ..controller.utils.orthanc import (
     get_instance_waveform,
     modify_instance_metadata,
     delete_instance,
-    search_instances,
-    get_instance_tags
+    get_instance_tags,
+    get_patient_instances
 )
 import os
 from pathlib import Path
@@ -39,6 +39,14 @@ class ECGFileResponse(BaseModel):
     filename: str
     created_at: datetime
     notes: str
+    tags: List[str] = []
+    dicom_uid: str
+    content: str = ''
+    instanceIDs: List[str] = []
+
+class PatientECGListResponse(BaseModel):
+    total: int
+    items: List[ECGFileResponse]
     tags: List[str]
     dicom_uid: str
     content: str
@@ -527,3 +535,60 @@ async def get_diagnosis(
             created_at=datetime.now()
         )
     ]
+
+@router.get("/patient/{patient_id}/files", response_model=List[ECGFileResponse])
+async def get_patient_ecg_files(
+    patient_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all ECG files for a specific patient.
+    
+    This endpoint requires user authentication.
+    """
+    try:
+        # 验证病人是否存在
+        patient = Patient.objects(patient_id=patient_id).first()
+        if not patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient not found"
+            )
+
+        # 在 Orthanc 服务器上获取该病人的所有实例
+        instances = get_patient_instances(patient_id, token=current_user.token)
+        if not instances:
+            return []
+
+        # 获取每个实例的详细信息
+        ecg_files = []
+        for instance in instances:
+            # 检查是否是 ECG 模态
+            if instance.get('MainDicomTags', {}).get('Modality') != 'ECG':
+                continue
+
+            # 检查本地数据库中是否有对应的记录
+            ecg_file = EcgFile.objects(dicom_uid=instance['ID']).first()
+            if ecg_file:
+                ecg_files.append(ECGFileResponse(
+                    file_id=str(ecg_file.id),
+                    user_id=str(ecg_file.patient_id.id),
+                    filename=instance.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+                    created_at=ecg_file.created_at,
+                    notes=ecg_file.notes,
+                    tags=ecg_file.tags,
+                    dicom_uid=ecg_file.dicom_uid,
+                    content=str(instance),
+                    instanceIDs=ecg_file.instanceIDs if hasattr(ecg_file, 'instanceIDs') else [ecg_file.dicom_uid]
+                ))
+
+        return ecg_files
+
+    except Exception as e:
+        print(f"Error getting patient ECG files: {str(e)}")
+        import traceback
+        print(f"Full error: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get patient ECG files: {str(e)}"
+        )

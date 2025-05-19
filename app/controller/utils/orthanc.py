@@ -290,36 +290,133 @@ def delete_instance(instance_id, token):
         print(f"Error deleting instance: {str(e)}")
         return False
 
-def search_instances(query, token):
+def get_patient_studies(patient_id, token):
     """
-    Search for DICOM instances in Orthanc server.
+    Get all studies for a specific patient.
     
     Args:
-        query (dict): Query parameters for search
+        patient_id (str): The patient ID
         token (str): JWT token for authentication
         
     Returns:
-        list: List of matching instance IDs
+        list: List of study details
     """
     try:
         headers = get_headers(token)
-        headers['Content-Type'] = 'application/json'
         
-        response = requests.post(
-            f"{ORTHANC_SERVER_URL}/tools/find",
-            headers=headers,
-            json=query
+        # 直接获取患者信息
+        response = requests.get(
+            f"{ORTHANC_SERVER_URL}/patients/{patient_id}",
+            headers=headers
+        )
+        
+        if response.status_code != 200:
+            print(f"Error getting patient: {response.status_code}")
+            print(f"Response: {response.text}")
+            return []
+            
+        patient_data = response.json()
+        studies = patient_data.get('Studies', [])
+        study_details = []
+        
+        # 获取每个研究的详细信息
+        for study_id in studies:
+            study_response = requests.get(
+                f"{ORTHANC_SERVER_URL}/studies/{study_id}",
+                headers=headers
+            )
+            if study_response.status_code == 200:
+                study_details.append(study_response.json())
+        
+            return study_details
+            
+    except Exception as e:
+        print(f"Error getting patient studies: {str(e)}")
+        import traceback
+        print(f"Full error: {traceback.format_exc()}")
+        return []
+
+def get_study_instances(study_id, token):
+    """
+    Get all instances in a study.
+    
+    Args:
+        study_id (str): The study ID
+        token (str): JWT token for authentication
+        
+    Returns:
+        list: List of instance details
+    """
+    try:
+        headers = get_headers(token)
+        
+        response = requests.get(
+            f"{ORTHANC_SERVER_URL}/studies/{study_id}/instances",
+            headers=headers
         )
         
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"Error searching instances: {response.status_code}")
+            print(f"Error getting study instances: {response.status_code}")
             print(f"Response: {response.text}")
             return []
             
     except Exception as e:
-        print(f"Error searching instances: {str(e)}")
+        print(f"Error getting study instances: {str(e)}")
+        return []
+
+def get_patient_instances(patient_id, token):
+    """
+    Get all instances for a specific patient.
+    
+    Args:
+        patient_id (str): The patient ID
+        token (str): JWT token for authentication
+        
+    Returns:
+        list: List of instance details
+    """
+    try:
+        # 获取患者的所有研究
+        studies = get_patient_studies(patient_id, token)
+        if not studies:
+            print(f"No studies found for patient {patient_id}")
+            return []
+            
+        # 获取每个研究中的所有实例
+        instances = []
+        for study in studies:
+            study_id = study['ID']
+            print(f"Getting instances for study {study_id}")
+            
+            # 直接使用 /studies/{id}/instances 端点
+            headers = get_headers(token)
+            response = requests.get(
+                f"{ORTHANC_SERVER_URL}/studies/{study_id}/instances",
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                study_instances = response.json()
+                # 获取每个实例的详细信息
+                for instance in study_instances:
+                    instance_response = requests.get(
+                        f"{ORTHANC_SERVER_URL}/instances/{instance}",
+                        headers=headers
+                    )
+                    if instance_response.status_code == 200:
+                        instances.append(instance_response.json())
+            else:
+                print(f"Error getting instances for study {study_id}: {response.status_code}")
+                print(f"Response: {response.text}")
+                
+        return instances
+        
+    except Exception as e:
+        print(f"Error getting patient instances: {str(e)}")
+        import traceback
+        print(f"Full error: {traceback.format_exc()}")
         return []
 
 def get_instance_tags(instance_id, token):

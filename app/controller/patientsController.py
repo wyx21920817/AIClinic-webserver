@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Query
 from typing import List, Optional
 from datetime import datetime
 from ..model.user import User, UserRole
 from ..model.patient import Patient, Gender
+from ..model.doctor_patient import DoctorPatient
 from .userController import get_current_user, get_admin_user
 from pydantic import BaseModel
 
@@ -53,6 +54,12 @@ class PatientResponse(BaseModel):
                 "updated_at": "2025-04-16T08:41:07"
             }
         }
+
+class PaginatedPatientResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[PatientResponse]
 
 @router.get("/patients", response_model=List[PatientResponse],
     summary="Get patient list",
@@ -221,3 +228,81 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
 
     patient.delete()
     return {"message": "Patient deleted successfully"}
+
+@router.post("/doctors/patients/{patient_id}",
+    summary="Add patient to doctor's list",
+    description="Add a patient to the current doctor's patient list. Requires doctor role.")
+async def add_patient_to_doctor(
+    patient_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Add a patient to the doctor's patient list.
+
+    This endpoint requires doctor privileges.
+    """
+    if current_user.role != UserRole.DOCTOR:
+        raise HTTPException(status_code=403, detail="Only doctors can add patients to their list")
+
+    # Check if patient exists
+    patient = Patient.objects(patient_id=patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    # Check if relationship already exists
+    existing_relation = DoctorPatient.objects(doctor=current_user.id, patient=patient.id).first()
+    if existing_relation:
+        raise HTTPException(status_code=400, detail="Patient is already in your list")
+
+    # Create new relationship
+    doctor_patient = DoctorPatient(doctor=current_user.id, patient=patient.id)
+    doctor_patient.save()
+
+    return {"message": "Patient added to your list successfully"}
+
+@router.get("/doctors/patients",
+    response_model=PaginatedPatientResponse,
+    summary="Get doctor's patient list",
+    description="Get the current doctor's patient list with pagination. Requires doctor role.")
+async def get_doctor_patients(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve a paginated list of doctor's patients.
+
+    This endpoint requires doctor privileges.
+    """
+    if current_user.role != UserRole.DOCTOR:
+        raise HTTPException(status_code=403, detail="Only doctors can view their patient list")
+
+    # Get total count
+    total = DoctorPatient.objects(doctor=current_user.id).count()
+
+    # Get paginated relationships
+    skip = (page - 1) * page_size
+    doctor_patients = DoctorPatient.objects(doctor=current_user.id).skip(skip).limit(page_size)
+
+    # Get patient details
+    patients = []
+    for dp in doctor_patients:
+        patient = Patient.objects(id=dp.patient.id).first()
+        if patient:
+            patients.append(PatientResponse(
+                id=str(patient.id),
+                patient_id=patient.patient_id,
+                name=patient.name,
+                gender=patient.gender,
+                birth_date=patient.birth_date,
+                contact_info=patient.contact_info,
+                created_at=patient.created_at,
+                updated_at=patient.updated_at
+            ))
+
+    return PaginatedPatientResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=patients
+    )
