@@ -592,3 +592,51 @@ async def get_patient_ecg_files(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get patient ECG files: {str(e)}"
         )
+
+
+
+@router.get("/{user_id}/instances/{instance_id}", response_model=ECGFileResponse)
+async def get_ecg_instances_file(
+    user_id: str,
+    instance_id: str,
+    download: bool = True,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get details of a specific ECG file.
+    
+    Requires doctor or admin privileges.
+    
+    Parameters:
+    - download: If true, returns the raw DICOM file
+    - waveform: If true, returns the ECG waveform data
+    """
+    await check_user_access(user_id, current_user)
+    
+    try:
+        if download:
+            # Get raw DICOM data
+            dicom_data = get_instance_dicom(instance_id, token=current_user.token)
+            if not dicom_data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="DICOM file not found on server"
+                )
+            return Response(
+                content=dicom_data,
+                media_type="application/dicom",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{instance_id}.dcm"'
+                }
+            )
+            
+
+       
+    except Exception as e:
+        print(f"Error getting file: {str(e)}")
+        import traceback
+        print(f"Full error: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get file: {str(e)}"
+        )
