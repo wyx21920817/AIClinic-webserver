@@ -548,7 +548,7 @@ async def get_patient_ecg_files(
     """
     try:
         # 验证病人是否存在
-        patient = Patient.objects(patient_id=patient_id).first()
+        patient = Patient.objects(id=patient_id).first()
         if not patient:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -556,31 +556,24 @@ async def get_patient_ecg_files(
             )
 
         # 在 Orthanc 服务器上获取该病人的所有实例
-        instances = get_patient_instances(patient_id, token=current_user.token)
+        instances = get_patient_instances(patient.patient_id, token=current_user.token)
         if not instances:
             return []
 
-        # 获取每个实例的详细信息
+        # 直接返回所有实例
         ecg_files = []
         for instance in instances:
-            # 检查是否是 ECG 模态
-            if instance.get('MainDicomTags', {}).get('Modality') != 'ECG':
-                continue
-
-            # 检查本地数据库中是否有对应的记录
-            ecg_file = EcgFile.objects(dicom_uid=instance['ID']).first()
-            if ecg_file:
-                ecg_files.append(ECGFileResponse(
-                    file_id=str(ecg_file.id),
-                    user_id=str(ecg_file.patient_id.id),
-                    filename=instance.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
-                    created_at=ecg_file.created_at,
-                    notes=ecg_file.notes,
-                    tags=ecg_file.tags,
-                    dicom_uid=ecg_file.dicom_uid,
-                    content=str(instance),
-                    instanceIDs=ecg_file.instanceIDs if hasattr(ecg_file, 'instanceIDs') else [ecg_file.dicom_uid]
-                ))
+            ecg_files.append(ECGFileResponse(
+                file_id=instance['ID'],  # 使用 Orthanc 的 instance ID 作为 file_id
+                user_id=patient_id,
+                filename=instance.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+                created_at=datetime.now(),
+                notes='',
+                tags=[],
+                dicom_uid=instance['ID'],
+                content=str(instance),
+                instanceIDs=[instance['ID']]
+            ))
 
         return ecg_files
 

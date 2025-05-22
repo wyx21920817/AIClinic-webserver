@@ -25,7 +25,8 @@ def get_headers(token):
     print(f"Using token for Orthanc API: {token}")  # Debug token
     return {
         'Authorization': f"Bearer {token}",
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
     }
 
 def upload_dicom_file(file_path, token):
@@ -378,45 +379,91 @@ def get_patient_instances(patient_id, token):
         list: List of instance details
     """
     try:
-        # 获取患者的所有研究
-        studies = get_patient_studies(patient_id, token)
-        if not studies:
-            print(f"No studies found for patient {patient_id}")
+        headers = get_headers(token)
+        print(f"[Orthanc] Getting patient info for ID: {patient_id}")
+        print(f"[Orthanc] Using headers: {headers}")
+        
+        # 获取患者信息
+        response = requests.get(
+            f"{ORTHANC_SERVER_URL}/patients/{patient_id}",
+            headers=headers,
+            timeout=30
+        )
+        
+        print(f"[Orthanc] Patient response status: {response.status_code}")
+        print(f"[Orthanc] Patient response: {response.text}")
+        
+        if response.status_code == 200:
+            patient_data = response.json()
+            instances = []
+            studies = patient_data.get('Studies', [])
+            print(f"[Orthanc] Found {len(studies)} studies for patient")
+            
+            # 获取所有studies
+            for study_id in studies:
+                print(f"[Orthanc] Getting study {study_id}")
+                study_response = requests.get(
+                    f"{ORTHANC_SERVER_URL}/studies/{study_id}",
+                    headers=headers,
+                    timeout=30
+                )
+                print(f"[Orthanc] Study response status: {study_response.status_code}")
+                
+                if study_response.status_code == 200:
+                    study_data = study_response.json()
+                    series_list = study_data.get('Series', [])
+                    print(f"[Orthanc] Found {len(series_list)} series in study {study_id}")
+                    
+                    # 获取所有series
+                    for series_id in series_list:
+                        print(f"[Orthanc] Getting series {series_id}")
+                        series_response = requests.get(
+                            f"{ORTHANC_SERVER_URL}/series/{series_id}",
+                            headers=headers,
+                            timeout=30
+                        )
+                        print(f"[Orthanc] Series response status: {series_response.status_code}")
+                        
+                        if series_response.status_code == 200:
+                            series_data = series_response.json()
+                            instance_list = series_data.get('Instances', [])
+                            print(f"[Orthanc] Found {len(instance_list)} instances in series {series_id}")
+                            
+                            # 获取所有instances
+                            for instance_id in instance_list:
+                                print(f"[Orthanc] Getting instance {instance_id}")
+                                instance_response = requests.get(
+                                    f"{ORTHANC_SERVER_URL}/instances/{instance_id}",
+                                    headers=headers,
+                                    timeout=30
+                                )
+                                print(f"[Orthanc] Instance response status: {instance_response.status_code}")
+                                
+                                if instance_response.status_code == 200:
+                                    instance_data = instance_response.json()
+                                    print(f"[Orthanc] Successfully got instance data: {instance_data.get('ID')}")
+                                    instances.append(instance_data)
+                                else:
+                                    print(f"[Orthanc] Error getting instance {instance_id}: {instance_response.status_code}")
+                                    print(f"[Orthanc] Error response: {instance_response.text}")
+                        else:
+                            print(f"[Orthanc] Error getting series {series_id}: {series_response.status_code}")
+                            print(f"[Orthanc] Error response: {series_response.text}")
+                else:
+                    print(f"[Orthanc] Error getting study {study_id}: {study_response.status_code}")
+                    print(f"[Orthanc] Error response: {study_response.text}")
+            
+            print(f"[Orthanc] Total instances found: {len(instances)}")
+            return instances
+        else:
+            print(f"[Orthanc] Error getting patient {patient_id}: {response.status_code}")
+            print(f"[Orthanc] Error response: {response.text}")
             return []
             
-        # 获取每个研究中的所有实例
-        instances = []
-        for study in studies:
-            study_id = study['ID']
-            print(f"Getting instances for study {study_id}")
-            
-            # 直接使用 /studies/{id}/instances 端点
-            headers = get_headers(token)
-            response = requests.get(
-                f"{ORTHANC_SERVER_URL}/studies/{study_id}/instances",
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                study_instances = response.json()
-                # 获取每个实例的详细信息
-                for instance in study_instances:
-                    instance_response = requests.get(
-                        f"{ORTHANC_SERVER_URL}/instances/{instance}",
-                        headers=headers
-                    )
-                    if instance_response.status_code == 200:
-                        instances.append(instance_response.json())
-            else:
-                print(f"Error getting instances for study {study_id}: {response.status_code}")
-                print(f"Response: {response.text}")
-                
-        return instances
-        
     except Exception as e:
-        print(f"Error getting patient instances: {str(e)}")
+        print(f"[Orthanc] Error getting patient instances: {str(e)}")
         import traceback
-        print(f"Full error: {traceback.format_exc()}")
+        print(f"[Orthanc] Full error: {traceback.format_exc()}")
         return []
 
 def get_instance_tags(instance_id, token):
@@ -431,20 +478,25 @@ def get_instance_tags(instance_id, token):
         dict: Dictionary containing DICOM tags or None if not found
     """
     try:
+        print(f"[Orthanc] Getting tags for instance: {instance_id}")
         response = requests.get(
-            f"{ORTHANC_SERVER_URL}/instances/{instance_id}/tags",
+            f"{ORTHANC_SERVER_URL}/instances/{instance_id}/simplified-tags",
             headers=get_headers(token)
         )
         
         if response.status_code == 200:
-            return response.json()
+            tags = response.json()
+            print(f"[Orthanc] Got tags: {tags}")
+            return tags
         else:
-            print(f"Error getting tags: {response.status_code}")
-            print(f"Response: {response.text}")
+            print(f"[Orthanc] Error getting tags: {response.status_code}")
+            print(f"[Orthanc] Error response: {response.text}")
             return None
             
     except Exception as e:
-        print(f"Error getting tags: {str(e)}")
+        print(f"[Orthanc] Error getting tags: {str(e)}")
+        import traceback
+        print(f"[Orthanc] Full error: {traceback.format_exc()}")
         return None
 
 def search_patients(query: str, token: str):
