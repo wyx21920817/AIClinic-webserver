@@ -145,7 +145,7 @@ async def login(
 
     # Send verification code via email
     try:
-        send_verification_email(user.email, mfa_code)
+        send_verification_email(user.email, verification_code)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to send verification email")
 
