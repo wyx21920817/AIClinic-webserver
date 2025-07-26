@@ -356,9 +356,13 @@ async def update_user(
     if current_user.role != UserRole.ADMIN and str(current_user.id) != user_id:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    user = User.objects(id=user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        from bson import ObjectId
+        user = User.objects(id=ObjectId(user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Invalid user ID format or user not found")
 
     # Only admin can change roles
     if role is not None and current_user.role != UserRole.ADMIN:
@@ -419,9 +423,13 @@ async def delete_user(user_id: str, current_user: User = Depends(get_current_use
     if current_user.role != UserRole.ADMIN and str(current_user.id) != user_id:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    user = User.objects(id=user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        from bson import ObjectId
+        user = User.objects(id=ObjectId(user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Invalid user ID format or user not found")
 
     # Prevent deleting the last admin
     if user.role == UserRole.ADMIN and User.objects(role=UserRole.ADMIN).count() <= 1:

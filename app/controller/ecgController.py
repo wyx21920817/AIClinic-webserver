@@ -175,13 +175,14 @@ async def get_ecg_file(
     try:
         # Convert file_id to ObjectId
         try:
+            from bson import ObjectId
             file_object_id = ObjectId(file_id)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid file_id format"
             )
-        
+            
         # Get file from database
         ecg_file = EcgFile.objects(id=file_object_id).first()
         if not ecg_file:
@@ -265,7 +266,14 @@ async def update_ecg_file(
         
         # Get file from database
         print(f"Searching for ECG file in database...")  # Debug
-        ecg_file = EcgFile.objects(id=file_id, patient_id=user_id).first()
+        try:
+            from bson import ObjectId
+            ecg_file = EcgFile.objects(id=ObjectId(file_id), patient_id=user_id).first()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid file_id format"
+            )
         if not ecg_file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -572,7 +580,14 @@ async def get_patient_ecg_files(
         # Log data access attempt
         
         # Verify patient exists
-        patient = Patient.objects(id=patient_id).first()
+        try:
+            from bson import ObjectId
+            patient = Patient.objects(id=ObjectId(patient_id)).first()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid patient_id format"
+            )
         if not patient:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -10,6 +10,7 @@ ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 from ..model.user import User, UserRole
 from ..model.patient import Patient, Gender
 from ..model.doctor_patient import DoctorPatient
+from ..model.audit_log import AuditLog
 from .userController import get_current_user, get_admin_user
 from pydantic import BaseModel
 

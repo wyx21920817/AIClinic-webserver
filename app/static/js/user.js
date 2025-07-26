@@ -169,7 +169,7 @@ async function deleteUser(userId) {
     if (!token) return;
 
     try {
-        const response = await fetch(`/api/users/${userId}`, {
+        const response = await fetch(`/api/user/${userId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -194,7 +194,7 @@ async function editUser(userId) {
 
     // Get current user data
     try {
-        const response = await fetch(`/api/users/${userId}`, {
+        const response = await fetch(`/api/user/${userId}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -235,7 +235,7 @@ async function updateUser() {
     }
 
     try {
-        const response = await fetch(`/api/users/${userId}`, {
+        const response = await fetch(`/api/user/${userId}`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
