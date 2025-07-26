@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Response, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -12,6 +12,7 @@ import os
 from dotenv import load_dotenv
 from ..core.config import settings
 from .utils.mail import send_verification_email
+from ..core.logging import AuditLog
 
 load_dotenv()
 
@@ -135,7 +136,18 @@ async def login(
     """
     user = User.objects(username=username).first()
     if not user or not user.verify_password(password):
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
+        # Log failed login attempt
+        AuditLog.log_auth(
+            user_id="anonymous",  # 未登录用户使用anonymous
+            action="login_attempt",
+            status="failure",
+            details="Invalid credentials",
+            username=username
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password"
+        )
 
     # Generate and store verification code
     verification_code = generate_mfa_code(username)
@@ -156,7 +168,8 @@ async def login(
     description="Second step of login process. Validates the email verification code and issues JWT token.")
 async def verify_mfa(
     username: str = Form(..., description="Username of the account"),
-    mfa_code: str = Form(..., description="6-digit verification code sent to email")
+    mfa_code: str = Form(..., description="6-digit verification code sent to email"),
+
 ):
     """
     Second step of the two-step login process:
@@ -181,7 +194,18 @@ async def verify_mfa(
         raise HTTPException(status_code=401, detail="No verification code found")
     
     if user.mfa_code != mfa_code:
-        raise HTTPException(status_code=401, detail="Invalid verification code")
+        # Log failed MFA attempt
+        AuditLog.log_auth(
+            user_id=str(user.id),
+            action="mfa_verify",
+            status="failure",
+            details="Invalid MFA code",
+            username=user.username
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid verification code"
+        )
     
     if datetime.utcnow() > user.mfa_expires_at:
         raise HTTPException(status_code=401, detail="Verification code has expired")
@@ -192,7 +216,18 @@ async def verify_mfa(
     user.save()
 
     # Generate JWT token
-    access_token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user.role.value}
+    )
+    
+    # Log successful login
+    AuditLog.log_auth(
+        user_id=str(user.id),
+        action="login_complete",
+        status="success",
+        details=f"User role: {user.role.value}",
+        username=user.username
+    )
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id), "role": user.role.value, "username": user.username}
 
 @router.get("/users", response_model=List[UserResponse],
@@ -278,6 +313,15 @@ async def create_user(
     user.set_password(password)
     user.save()
 
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="create",
+        resource_type="user",
+        resource_id=str(user.id),
+        details=f"Create new user: {user.username}",
+        username=current_user.username
+    )
+    
     return UserResponse(
         id=str(user.id),
         username=user.username,
@@ -343,6 +387,15 @@ async def update_user(
     user.updated_at = datetime.utcnow()
     user.save()
 
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="update",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"Update user: {user.username}",
+        username=current_user.username
+    )
+    
     return UserResponse(
         id=str(user.id),
         username=user.username,
@@ -375,6 +428,16 @@ async def delete_user(user_id: str, current_user: User = Depends(get_current_use
         raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
 
     user.delete()
+    
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="delete",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"Delete user: {user.username}",
+        username=current_user.username
+    )
+    
     return {"message": "User deleted successfully"}
 
 @router.post("/register", response_model=UserResponse, status_code=201,
@@ -416,6 +479,15 @@ async def register(
         user.set_password(password)
         user.save()
 
+        AuditLog.log_data_access(
+            user_id=str(user.id),
+            action="create",
+            resource_type="user",
+            resource_id=str(user.id),
+            details=f"Create new user: {user.username}",
+            username=user.username
+        )
+        
         return UserResponse(
             id=str(user.id),
             username=user.username,

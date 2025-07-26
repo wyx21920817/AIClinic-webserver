@@ -7,6 +7,7 @@ from ..model.user import User
 from ..model.ecg_file import EcgFile
 from ..model.patient import Patient
 from ..controller.userController import get_current_user, get_admin_user
+from ..core.logging import AuditLog
 from ..controller.utils.orthanc import (
     upload_dicom_file, 
     get_instance, 
@@ -127,6 +128,8 @@ async def get_ecg_files(
     Requires doctor or admin privileges.
     """
     await check_user_access(user_id, current_user)
+    
+    # Log data access
     
     # Get files from database for this user
     ecg_files = EcgFile.objects(patient_id=user_id).all()
@@ -484,6 +487,16 @@ async def upload_ecg_file(
                 )
             ecg_file.save()
             
+            # Log successful upload
+            AuditLog.log_data_access(
+                user_id=str(current_user.id),
+                action="upload_success",
+                resource_type="ecg_file",
+                resource_id=ecg_file.dicom_uid,
+                details=f"Upload success - Patient: {user_id}, File: {file.filename}, Tags: {ecg_file.tags}",
+                username=current_user.username
+            )
+            
             return {
                 "file_id": str(ecg_file.id),
                 "user_id": user_id,
@@ -520,6 +533,15 @@ async def get_diagnosis(
     """
     await check_user_access(user_id, current_user)
     
+    # Log diagnosis API access
+    AuditLog.log_api_call(
+        user_id=str(current_user.id),
+        action="get_diagnosis",
+        api_endpoint=f"/api/ecg/{user_id}/diagnosis",
+        details=f"Get diagnosis for patient: {user_id}",
+        username=current_user.username
+    )
+    
     # TODO: Implement database query to get AI diagnosis results
     # This is a mock response
     return [
@@ -547,7 +569,9 @@ async def get_patient_ecg_files(
     This endpoint requires user authentication.
     """
     try:
-        # 验证病人是否存在
+        # Log data access attempt
+        
+        # Verify patient exists
         patient = Patient.objects(id=patient_id).first()
         if not patient:
             raise HTTPException(
@@ -605,6 +629,18 @@ async def get_ecg_instances_file(
     - waveform: If true, returns the ECG waveform data
     """
     await check_user_access(user_id, current_user)
+    
+    # Log instance access
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="view",
+        resource_type="ecg_instance",
+        resource_id=instance_id,
+        details={
+            "patient_id": user_id,
+            "download": download
+        }
+    )
     
     try:
         if download:

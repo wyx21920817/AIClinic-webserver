@@ -89,6 +89,15 @@ async def verify_token(authorization: str = Header(None)):
             response_data['labels'].extend(["all", "modify"])
         
         logger.info(f"Successful token verification for user {sub} with role {role}")
+        
+        # 记录审计日志
+        AuditLog.log_auth(
+            user_id=sub,
+            action="verify_token",
+            details=f"Token verification for user {sub} with role {role}",
+            username=payload.get('username', sub)
+        )
+        
         return JSONResponse(content=response_data)
         
     except jwt.ExpiredSignatureError:
@@ -126,6 +135,14 @@ async def get_temp_token():
         
         # 生成token
         token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
+        
+        # 记录审计日志
+        AuditLog.log_auth(
+            user_id="system",
+            action="generate_temp_token",
+            details="Generated temporary token for Orthanc access",
+            username="system"
+        )
         
         return JSONResponse(
             content={

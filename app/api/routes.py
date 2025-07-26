@@ -72,6 +72,7 @@ async def upload_file(file: UploadFile = File(...), background_tasks: Background
         
         # 添加后台任务
         background_tasks.add_task(process_image_task, file_id, temp_file, output_dir)
+
         
         return JSONResponse({
             "status": "success",

@@ -4,9 +4,17 @@ import json
 import pydicom
 from io import BytesIO
 import numpy as np
+from fastapi import Request
 from app.core.config import settings
+from app.core.logging import AuditLog
+import traceback
+import requests
+import os
+import pydicom
+from typing import List, Dict, Optional
+from .token_utils import get_user_info_from_token
 
-# 从配置中获取 Orthanc 服务器 URL
+# Get Orthanc server URL from configuration
 ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 
 def get_headers(token):
@@ -104,7 +112,7 @@ def upload_dicom_folder(folder_path, token):
                     
     return successful_uploads
 
-def get_instance(instance_id, token):
+def get_instance(instance_id: str, token: str):
     """
     Get DICOM instance details from Orthanc server.
     
@@ -116,6 +124,10 @@ def get_instance(instance_id, token):
         dict: Instance details or None if not found
     """
     try:
+        # Extract user info from token
+        user_id, username = get_user_info_from_token(token)
+        
+        
         response = requests.get(
             f"{ORTHANC_SERVER_URL}/instances/{instance_id}",
             headers=get_headers(token)
@@ -144,6 +156,10 @@ def get_instance_dicom(instance_id, token):
         bytes: Raw DICOM data or None if not found
     """
     try:
+        # Extract user info from token
+        user_id, username = get_user_info_from_token(token)
+        
+        
         response = requests.get(
             f"{ORTHANC_SERVER_URL}/instances/{instance_id}/file",
             headers=get_headers(token)
@@ -256,6 +272,7 @@ def modify_instance_metadata(instance_id, metadata, token):
                 print(f"Successfully created new instance: {new_instance_id}")
                 return {
                     'instance_id': new_instance_id,
+                    'details': f"Modify instance: {instance_id}",
                     'current_instances': current_instances
                 }
         except Exception as e:
@@ -280,6 +297,19 @@ def delete_instance(instance_id, token):
         bool: True if successful, False otherwise
     """
     try:
+        # Extract user info from token
+        user_id, username = get_user_info_from_token(token)
+        
+        # Log the data access attempt
+        AuditLog.log_data_access(
+            user_id=user_id,
+            action="delete",
+            resource_type="instance",
+            resource_id=instance_id,
+            details=f"Delete instance: {instance_id}",
+            username=username
+        )
+        
         response = requests.delete(
             f"{ORTHANC_SERVER_URL}/instances/{instance_id}",
             headers=get_headers(token)
@@ -291,7 +321,7 @@ def delete_instance(instance_id, token):
         print(f"Error deleting instance: {str(e)}")
         return False
 
-def get_patient_studies(patient_id, token):
+def get_patient_studies(patient_id: str, token: str):
     """
     Get all studies for a specific patient.
     
@@ -303,6 +333,10 @@ def get_patient_studies(patient_id, token):
         list: List of study details
     """
     try:
+        # Extract user info from token
+        user_id, username = get_user_info_from_token(token)
+        
+        
         headers = get_headers(token)
         
         # 直接获取患者信息
@@ -337,7 +371,7 @@ def get_patient_studies(patient_id, token):
         print(f"Full error: {traceback.format_exc()}")
         return []
 
-def get_study_instances(study_id, token):
+def get_study_instances(study_id: str, token: str):
     """
     Get all instances in a study.
     
@@ -349,6 +383,10 @@ def get_study_instances(study_id, token):
         list: List of instance details
     """
     try:
+        # Extract user info from token
+        user_id, username = get_user_info_from_token(token)
+        
+        
         headers = get_headers(token)
         
         response = requests.get(
@@ -367,7 +405,7 @@ def get_study_instances(study_id, token):
         print(f"Error getting study instances: {str(e)}")
         return []
 
-def get_patient_instances(patient_id, token):
+def get_patient_instances(patient_id: str, token: str):
     """
     Get all instances for a specific patient.
     

@@ -158,6 +158,15 @@ async def create_patient(
     )
     patient.save()
 
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="create",
+        resource_type="patient",
+        resource_id=str(patient.id),
+        details=f"Create new patient: {patient.name}",
+        username=current_user.username
+    )
+
     return PatientResponse(
         id=str(patient.id),
         patient_id=patient.patient_id,
@@ -208,6 +217,15 @@ async def update_patient(
 
     patient.save()
 
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="update",
+        resource_type="patient",
+        resource_id=patient_id,
+        details=f"Update patient: {patient.name}",
+        username=current_user.username
+    )
+
     return PatientResponse(
         id=str(patient.id),
         patient_id=patient.patient_id,
@@ -232,7 +250,18 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    patient_name = patient.name
     patient.delete()
+
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="delete",
+        resource_type="patient",
+        resource_id=patient_id,
+        details=f"Delete patient: {patient_name}",
+        username=current_user.username
+    )
+
     return {"message": "Patient deleted successfully"}
 
 @router.get("/orthanc/patients/search",

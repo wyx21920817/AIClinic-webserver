@@ -72,5 +72,7 @@ def create_app():
     from app.controller.authenticateController import router as authenticate_router
     app.include_router(authenticate_router)
 
+    from app.controller.auditController import router as audit_router
+    app.include_router(audit_router)
 
     return app
