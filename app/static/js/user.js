@@ -97,7 +97,7 @@ async function getCurrentUser() {
     if (!token) return null;
 
     try {
-        const response = await fetch('/api/users/me', {
+        const response = await fetch('/api/user/me', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -126,7 +126,7 @@ async function getUserList() {
     if (!token) return;
 
     try {
-        const response = await fetch('/api/users', {
+        const response = await fetch('/api/user', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
