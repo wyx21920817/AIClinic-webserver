@@ -6,6 +6,7 @@ import os
 from fastapi.responses import Response
 import json
 import logging
+from ..core.logging import AuditLog
 
 router = APIRouter(
     prefix="/api/auth",
