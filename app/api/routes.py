@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import shutil
@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.services.dicom_service import dicom_service
 from app.utils.logger_config import logger
 import os
+import requests
 
 router = APIRouter()
 
@@ -95,8 +96,9 @@ async def upload_file(file: UploadFile = File(...)):
             from app.controller.utils.orthanc import upload_dicom_file
             response = upload_dicom_file(str(temp_file), temp_token)
             
-            if not response:
-                raise HTTPException(status_code=500, detail="上传到Orthanc服务器失败")
+            if isinstance(response, dict) and 'error' in response:
+                logger.error(f"Orthanc upload failed: {response['error']}")
+                raise HTTPException(status_code=500, detail=response['error'])
                 
             # 记录实例元数据
             instance_id = response.get('ID')
@@ -122,20 +124,17 @@ async def upload_file(file: UploadFile = File(...)):
             logger.error(f"文件验证或上传失败: {str(e)}")
             raise HTTPException(status_code=400, detail=f"无效的DICOM文件或上传失败: {str(e)}")
             
-        finally:
-            # 清理临时文件
-            shutil.rmtree(temp_dir)
-            
-    except Exception as e:
-        logger.error(f"上传失败: {str(e)}")
-        # 确保清理临时文件
-        if 'temp_dir' in locals():
-            shutil.rmtree(temp_dir)
-        raise HTTPException(status_code=500, detail=str(e))
-            
     except Exception as e:
         logger.error(f"上传失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # 确保临时目录始终被清理
+        if temp_dir is not None and temp_dir.exists():
+            try:
+                shutil.rmtree(temp_dir)
+                logger.debug(f"Cleaned up temporary directory: {temp_dir}")
+            except Exception as e:
+                logger.error(f"清理临时目录失败: {str(e)}")
 
 @router.get("/status/{task_id}")
 async def get_task_status(task_id: str):

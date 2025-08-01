@@ -67,7 +67,8 @@ def upload_dicom_file(file_path, token):
             f"{ORTHANC_SERVER_URL}/instances",
             headers=headers,
             data=dicom_content,
-            verify=False  # 如果是自签名证书，可能需要这个
+            verify=False,  # 如果是自签名证书，可能需要这个
+            timeout=(5, 30)  # 连接超时和读取超时
         )
         
         # Log response details
