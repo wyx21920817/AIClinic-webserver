@@ -244,10 +244,10 @@ async def get_ecg_file(
             detail=f"Failed to get file: {str(e)}"
         )
 
-@router.put("/{user_id}/files/{file_id}", response_model=ECGFileResponse)
+@router.put("/{user_id}/files/{instance_id}", response_model=ECGFileResponse)
 async def update_ecg_file(
     user_id: str,
-    file_id: str,
+    instance_id: str,
     notes: str = Form(...),
     tags: str = Form(...),
     current_user: User = Depends(get_current_user)
@@ -255,25 +255,22 @@ async def update_ecg_file(
     """
     Update ECG file notes and tags.
     
+    Args:
+        user_id: ID of the user who owns the file
+        instance_id: Orthanc instance ID of the DICOM file
+        notes: Notes about the ECG recording
+        tags: Tags for categorization (comma-separated string)
+        current_user: Current authenticated user
+    
     Requires doctor or admin privileges.
-    - **notes**: Notes about the ECG recording
-    - **tags**: Tags for categorization (comma-separated string)
     """
     try:
-        print(f"Updating ECG file - user_id: {user_id}, file_id: {file_id}")  # Debug
+        logger.info(f"Updating ECG file - user_id: {user_id}, instance_id: {instance_id}")
         
         await check_user_access(user_id, current_user)
         
-        # Get file from database
-        print(f"Searching for ECG file in database...")  # Debug
-        try:
-            from bson import ObjectId
-            ecg_file = EcgFile.objects(id=ObjectId(file_id), patient_id=user_id).first()
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid file_id format"
-            )
+        # Get file from database using instance_id
+        ecg_file = EcgFile.objects(dicom_uid=instance_id, patient_id=user_id).first()
         if not ecg_file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -338,57 +335,48 @@ async def update_ecg_file(
             detail=f"Failed to update ECG file: {str(e)}"
         )
 
-@router.delete("/{user_id}/files/{file_id}")
+@router.delete("/{user_id}/files/{instance_id}")
 async def delete_ecg_file(
     user_id: str,
-    file_id: str,
+    instance_id: str,
     current_user: User = Depends(get_current_user)
 ):
     """
     Delete an ECG file.
+    
+    Args:
+        user_id: ID of the user who owns the file
+        instance_id: Orthanc instance ID of the DICOM file
+        current_user: Current authenticated user
     
     Requires doctor or admin privileges.
     """
     await check_user_access(user_id, current_user)
     
     try:
-        # Convert file_id to ObjectId
-        try:
-            file_object_id = ObjectId(file_id)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid file_id format"
-            )
-        
-        # Get file from database using only file_id
-        ecg_file = EcgFile.objects(id=file_object_id).first()
+        # Get file from database using instance_id
+        ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
         if not ecg_file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="ECG file not found"
             )
         
-        # Store dicom_uid before deletion
-        dicom_uid = ecg_file.dicom_uid
-        
         # Delete from database first
         ecg_file.delete()
         
         # Then try to delete from Orthanc server
-        # Even if this fails, we don't rollback the database deletion
+        # Even if this fails, we don't rollback the database deletion since
+        # the file may have already been deleted from Orthanc
         try:
-            delete_instance(dicom_uid, token=current_user.token)
+            await delete_instance(instance_id, token=current_user.token)
         except Exception as e:
-            print(f"Warning: Failed to delete from Orthanc server: {str(e)}")
-            # Don't raise exception here, as the file is already deleted from database
+            logger.warning(f"Failed to delete instance {instance_id} from Orthanc: {str(e)}")
+            # Don't raise exception here as the file is already deleted from database
         
         return {"message": "File deleted successfully"}
         
-    except HTTPException as he:
-        raise he
     except Exception as e:
-        print(f"Error deleting file: {str(e)}")
         import traceback
         print(f"Full error: {traceback.format_exc()}")
         raise HTTPException(
