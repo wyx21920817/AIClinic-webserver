@@ -45,8 +45,36 @@ def process_image_task(file_id: str, input_file: Path, output_dir: Path):
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     """上传DICOM文件到Orthanc服务器"""
+    temp_dir = None
     try:
-        # 生成唯一的文件ID
+        # 获取临时token
+        try:
+            # 添加适当的headers，如果需要
+            headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+            response = requests.get(
+                'http://52.63.231.27:8000/api/auth/temp-token',
+                headers=headers,
+                verify=False  # 如果是自签名证书可能需要这个
+            )
+            if response.status_code == 200:
+                temp_token = response.json().get('token')
+                if not temp_token:
+                    raise ValueError("Token not found in response")
+                logger.info("Successfully obtained temporary token")
+            else:
+                logger.error(f"Failed to get temp token. Status: {response.status_code}, Response: {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"获取临时令牌失败: {response.text}"
+                )
+        except Exception as e:
+            logger.error(f"获取临时令牌失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"获取临时令牌失败: {str(e)}")
+            
+        # 生成唯一的文件ID并创建临时目录
         file_id = str(uuid.uuid4())
         temp_dir = settings.UPLOAD_DIR / file_id
         temp_dir.mkdir(exist_ok=True)
@@ -60,20 +88,35 @@ async def upload_file(file: UploadFile = File(...)):
         
         try:
             # 验证是否为DICOM文件
-            dcmread(temp_file)
+            dicom_data = dcmread(temp_file)
+            logger.info(f"Valid DICOM file detected: {file.filename}")
             
-            # 直接发送到Orthanc服务器
+            # 上传到Orthanc服务器
             from app.controller.utils.orthanc import upload_dicom_file
-            response = upload_dicom_file(str(temp_file), None)  # token will be handled by the function
+            response = upload_dicom_file(str(temp_file), temp_token)
             
-            if response:
-                return JSONResponse({
-                    "status": "success",
-                    "message": "DICOM文件已上传到Orthanc服务器",
-                    "instance_id": response.get('ID')
-                })
-            else:
+            if not response:
                 raise HTTPException(status_code=500, detail="上传到Orthanc服务器失败")
+                
+            # 记录实例元数据
+            instance_id = response.get('ID')
+            parent_info = {
+                'patient_id': response.get('ParentPatient'),
+                'study_id': response.get('ParentStudy'),
+                'series_id': response.get('ParentSeries')
+            }
+            
+            logger.info(f"Successfully uploaded DICOM instance: {instance_id}")
+            logger.debug(f"Parent information: {parent_info}")
+            
+            # 返回成功响应
+            return JSONResponse({
+                "status": "success",
+                "message": "DICOM文件已上传到Orthanc服务器",
+                "instance_id": instance_id,
+                "parent_info": parent_info
+            })
+
                 
         except Exception as e:
             logger.error(f"文件验证或上传失败: {str(e)}")
