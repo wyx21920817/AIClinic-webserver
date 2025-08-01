@@ -43,8 +43,8 @@ def process_image_task(file_id: str, input_file: Path, output_dir: Path):
         }
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
-    """上传文件并开始异步转换"""
+async def upload_file(file: UploadFile = File(...)):
+    """上传DICOM文件到Orthanc服务器"""
     try:
         # 生成唯一的文件ID
         file_id = str(uuid.uuid4())
@@ -58,27 +58,37 @@ async def upload_file(file: UploadFile = File(...), background_tasks: Background
         with temp_file.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 创建输出目录
-        output_dir = settings.DICOM_DIR / file_id
-        output_dir.mkdir(exist_ok=True)
-        
-        # 初始化任务状态
-        conversion_tasks[file_id] = {
-            "status": "processing",
-            "message": "正在处理中",
-            "dicom_files": [],
-            "error": None
-        }
-        
-        # 添加后台任务
-        background_tasks.add_task(process_image_task, file_id, temp_file, output_dir)
-
-        
-        return JSONResponse({
-            "status": "success",
-            "message": "文件已上传，正在处理中",
-            "task_id": file_id
-        })
+        try:
+            # 验证是否为DICOM文件
+            dcmread(temp_file)
+            
+            # 直接发送到Orthanc服务器
+            from app.controller.utils.orthanc import upload_dicom_file
+            response = upload_dicom_file(str(temp_file), None)  # token will be handled by the function
+            
+            if response:
+                return JSONResponse({
+                    "status": "success",
+                    "message": "DICOM文件已上传到Orthanc服务器",
+                    "instance_id": response.get('ID')
+                })
+            else:
+                raise HTTPException(status_code=500, detail="上传到Orthanc服务器失败")
+                
+        except Exception as e:
+            logger.error(f"文件验证或上传失败: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"无效的DICOM文件或上传失败: {str(e)}")
+            
+        finally:
+            # 清理临时文件
+            shutil.rmtree(temp_dir)
+            
+    except Exception as e:
+        logger.error(f"上传失败: {str(e)}")
+        # 确保清理临时文件
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir)
+        raise HTTPException(status_code=500, detail=str(e))
             
     except Exception as e:
         logger.error(f"上传失败: {str(e)}")
