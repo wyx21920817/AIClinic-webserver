@@ -583,11 +583,28 @@ async def get_patient_ecg_files(
         # 直接返回所有实例
         ecg_files = []
         for instance in instances:
+            # 从DICOM标签中获取创建时间
+            # 首选ContentDate/ContentTime，如果没有则使用StudyDate/StudyTime
+            dicom_date = instance.get('MainDicomTags', {}).get('ContentDate', 
+                        instance.get('MainDicomTags', {}).get('StudyDate'))
+            dicom_time = instance.get('MainDicomTags', {}).get('ContentTime', 
+                        instance.get('MainDicomTags', {}).get('StudyTime', '000000'))
+            
+            # 解析DICOM日期时间格式 (YYYYMMDD HHMMSS)
+            try:
+                if dicom_date:
+                    created_at = datetime.strptime(f"{dicom_date}{dicom_time}", '%Y%m%d%H%M%S')
+                else:
+                    created_at = datetime.now()
+            except ValueError:
+                logger.warning(f"Invalid DICOM date/time format: {dicom_date} {dicom_time}. Using current time.")
+                created_at = datetime.now()
+                
             ecg_files.append(ECGFileResponse(
                 file_id=instance['ID'],  # 使用 Orthanc 的 instance ID 作为 file_id
                 user_id=patient_id,
                 filename=instance.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
-                created_at=datetime.now(),
+                created_at=created_at,
                 notes='',
                 tags=[],
                 dicom_uid=instance['ID'],
