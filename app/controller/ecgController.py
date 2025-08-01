@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Body, Request
-from app.utils.audit_logger import audit_logger as logger
+from app.utils.logger_config import logger
 from fastapi.responses import JSONResponse, Response
 from typing import List, Optional
 from datetime import datetime
@@ -269,16 +269,7 @@ async def update_ecg_file(
         await check_user_access(user_id, current_user)
         
         # Log the update attempt
-        logger.info(
-            f"User {current_user.username} (role: {current_user.role}) attempting to update ECG file",
-            extra={
-                "action": "update_ecg",
-                "user_id": user_id,
-                "instance_id": instance_id,
-                "actor": current_user.username,
-                "actor_role": current_user.role
-            }
-        )
+        logger.info(f"User {current_user.username} (role: {current_user.role}) attempting to update ECG file - user_id: {user_id}, instance_id: {instance_id}")
         
         # Convert tags string to list
         tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
@@ -321,16 +312,7 @@ async def update_ecg_file(
         ecg_file = await update_ecg_file_in_db(user_id, instance_id, notes, tag_list)
         
         # Log successful update
-        logger.info(
-            f"Successfully updated ECG file",
-            extra={
-                "action": "update_ecg_success",
-                "user_id": user_id,
-                "instance_id": instance_id,
-                "actor": current_user.username,
-                "tags": tag_list
-            }
-        )
+        logger.info(f"Successfully updated ECG file - user_id: {user_id}, instance_id: {instance_id}, tags: {tag_list}")
         
         return ECGFileResponse(
             id=str(ecg_file.id),
@@ -372,40 +354,14 @@ async def delete_ecg_file(
     
     try:
         # Log the deletion attempt
-        logger.info(
-            f"User {current_user.username} (role: {current_user.role}) attempting to delete ECG file",
-            extra={
-                "action": "delete_ecg",
-                "user_id": user_id,
-                "instance_id": instance_id,
-                "actor": current_user.username,
-                "actor_role": current_user.role
-            }
-        )
+        logger.info(f"User {current_user.username} (role: {current_user.role}) attempting to delete ECG file - user_id: {user_id}, instance_id: {instance_id}")
 
         # Try to delete from Orthanc server
         try:
             await delete_instance(instance_id, token=current_user.token)
-            logger.info(
-                f"Successfully deleted ECG file from Orthanc",
-                extra={
-                    "action": "delete_ecg_success",
-                    "user_id": user_id,
-                    "instance_id": instance_id,
-                    "actor": current_user.username
-                }
-            )
+            logger.info(f"Successfully deleted ECG file from Orthanc - user_id: {user_id}, instance_id: {instance_id}")
         except Exception as e:
-            logger.warning(
-                f"Failed to delete instance from Orthanc",
-                extra={
-                    "action": "delete_ecg_error",
-                    "user_id": user_id,
-                    "instance_id": instance_id,
-                    "actor": current_user.username,
-                    "error": str(e)
-                }
-            )
+            logger.warning(f"Failed to delete instance from Orthanc - user_id: {user_id}, instance_id: {instance_id}, error: {str(e)}")
         
         return {"message": "File deleted successfully"}
         
