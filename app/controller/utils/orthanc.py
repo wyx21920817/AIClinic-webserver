@@ -13,6 +13,7 @@ import os
 import pydicom
 from typing import List, Dict, Optional
 from .token_utils import get_user_info_from_token
+from app.utils.logger_config import logger
 
 # Get Orthanc server URL from configuration
 ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
@@ -69,22 +70,24 @@ def upload_dicom_file(file_path, token):
             verify=False  # 如果是自签名证书，可能需要这个
         )
         
-        print(f"Upload response status: {response.status_code}")  # Debug
-        print(f"Upload response headers: {response.headers}")  # Debug
-        print(f"Upload response text: {response.text}")  # Debug
+        # Log response details
+        logger.info(f"Orthanc upload response status: {response.status_code}")
+        logger.debug(f"Orthanc upload response headers: {response.headers}")
+        logger.debug(f"Orthanc upload response text: {response.text}")
         
         if response.status_code in [200, 201]:  # 接受 200 或 201
+            logger.info(f"Successfully uploaded DICOM file to Orthanc: {file_path}")
             return response.json()
         else:
-            print(f"Error uploading DICOM file: {response.status_code}")
-            print(f"Response: {response.text}")
-            return None
+            error_msg = f"Error uploading DICOM file: {response.status_code}. Response: {response.text}"
+            logger.error(error_msg)
+            return {"error": error_msg}
             
     except Exception as e:
-        print(f"Error uploading DICOM file: {str(e)}")
-        import traceback
-        print(f"Full error: {traceback.format_exc()}")  # 添加完整的错误追踪
-        return None
+        error_msg = f"Error uploading DICOM file: {str(e)}"
+        logger.error(error_msg)
+        logger.error(f"Full error: {traceback.format_exc()}")  # 添加完整的错误追踪
+        return {"error": error_msg}
 
 def upload_dicom_folder(folder_path, token):
     """
