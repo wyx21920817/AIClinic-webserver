@@ -424,9 +424,13 @@ async def upload_ecg_file(
             # 上传到Orthanc服务器
             orthanc_response = upload_dicom_file(temp_path, token=current_user.token)
             if not orthanc_response:
+                # Get the error message from the response if available
+                error_detail = "Failed to upload file to Orthanc server"
+                if isinstance(orthanc_response, dict) and 'error' in orthanc_response:
+                    error_detail += f": {orthanc_response['error']}"
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to upload file to Orthanc server"
+                    detail=error_detail
                 )
             
             # 从Orthanc响应中获取DICOM UID
