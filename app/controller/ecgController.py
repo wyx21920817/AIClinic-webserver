@@ -268,15 +268,7 @@ async def update_ecg_file(
         logger.info(f"Updating ECG file - user_id: {user_id}, instance_id: {instance_id}")
         
         await check_user_access(user_id, current_user)
-        
-        # Get file from database using instance_id
-        ecg_file = EcgFile.objects(dicom_uid=instance_id, patient_id=user_id).first()
-        if not ecg_file:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="ECG file not found"
-            )
-        print(f"Found ECG file with dicom_uid: {ecg_file.dicom_uid}")  # Debug
+  
         
         # Convert tags string to list
         tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
@@ -354,17 +346,6 @@ async def delete_ecg_file(
     await check_user_access(user_id, current_user)
     
     try:
-        # Get file from database using instance_id
-        ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
-        if not ecg_file:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="ECG file not found"
-            )
-        
-        # Delete from database first
-        ecg_file.delete()
-        
         # Then try to delete from Orthanc server
         # Even if this fails, we don't rollback the database deletion since
         # the file may have already been deleted from Orthanc
