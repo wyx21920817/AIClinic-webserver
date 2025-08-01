@@ -583,12 +583,11 @@ async def get_patient_ecg_files(
         # 直接返回所有实例
         ecg_files = []
         for instance in instances:
-            # 从DICOM标签中获取创建时间
-            # 首选ContentDate/ContentTime，如果没有则使用StudyDate/StudyTime
-            dicom_date = instance.get('MainDicomTags', {}).get('ContentDate', 
-                        instance.get('MainDicomTags', {}).get('StudyDate'))
-            dicom_time = instance.get('MainDicomTags', {}).get('ContentTime', 
-                        instance.get('MainDicomTags', {}).get('StudyTime', '000000'))
+            # 从DICOM标签中获取实例创建时间
+            dicom_date = instance.get('MainDicomTags', {}).get('InstanceCreationDate')
+            dicom_time = instance.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
+            if '.' in dicom_time:  # 处理可能带有小数点的时间格式
+                dicom_time = dicom_time.split('.')[0]  # 只取时分秒部分
             
             # 解析DICOM日期时间格式 (YYYYMMDD HHMMSS)
             try:
