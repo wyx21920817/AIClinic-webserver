@@ -45,7 +45,7 @@ class PatientResponse(BaseModel):
     updated_at: datetime
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "507f1f77bcf86cd799439011",
                 "patient_id": "P001",
@@ -68,32 +68,47 @@ class PaginatedPatientResponse(BaseModel):
     page_size: int
     items: List[PatientResponse]
 
-@router.get("/patients", response_model=List[PatientResponse],
-    summary="Get patient list",
-    description="Get a list of all patients. Requires doctor or admin role.")
-async def get_patients(current_user: User = Depends(get_current_user)):
+@router.get("/patients", response_model=PaginatedPatientResponse,
+    summary="Get paginated patient list",
+    description="Get a paginated list of all patients. Requires doctor or admin role.")
+async def get_patients(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    current_user: User = Depends(get_current_user)
+):
     """
-    Retrieve a list of all patients.
+    Retrieve a paginated list of all patients.
 
     This endpoint requires doctor or admin privileges.
-    Returns a list of patients with their details.
+    Returns a paginated list of patients with their details.
     """
     if current_user.role not in [UserRole.DOCTOR, UserRole.ADMIN]:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    patients = Patient.objects().all()
-    return [
-        PatientResponse(
-            id=str(patient.id),
-            patient_id=patient.patient_id,
-            name=patient.name,
-            gender=patient.gender,
-            birth_date=patient.birth_date,
-            contact_info=patient.contact_info,
-            created_at=patient.created_at,
-            updated_at=patient.updated_at
-        ) for patient in patients
-    ]
+    # Get total count
+    total = Patient.objects().count()
+
+    # Get paginated patients
+    skip = (page - 1) * page_size
+    patients = Patient.objects().skip(skip).limit(page_size)
+
+    return PaginatedPatientResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            PatientResponse(
+                id=str(patient.id),
+                patient_id=patient.patient_id,
+                name=patient.name,
+                gender=patient.gender,
+                birth_date=patient.birth_date,
+                contact_info=patient.contact_info,
+                created_at=patient.created_at,
+                updated_at=patient.updated_at
+            ) for patient in patients
+        ]
+    )
 
 @router.get("/patients/{patient_id}", response_model=PatientResponse,
     summary="Get single patient details",

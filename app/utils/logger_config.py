@@ -4,29 +4,30 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 import json
 from datetime import datetime
+from typing import Optional
 
 def setup_logger(name='AIClinic', log_file='server.log'):
-    """设置日志记录器"""
-    # 创建logs目录
+    """Setup logger with console and file handlers"""
+    # Create logs directory
     log_dir = Path('logs')
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / log_file
 
-    # 创建日志记录器
+    # Create logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 
-    # 创建格式化器
+    # Create formatter
     detailed_formatter = logging.Formatter(
         '%(asctime)s [%(levelname)s] %(name)s - %(module)s.%(funcName)s:%(lineno)d - %(message)s'
     )
 
-    # 创建控制台处理器
+    # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(detailed_formatter)
 
-    # 创建文件处理器
+    # Create file handler with rotation
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=10*1024*1024,  # 10MB
@@ -56,33 +57,39 @@ def setup_logger(name='AIClinic', log_file='server.log'):
 
     return logger
 
-def log_request_info(logger, request, response_status=None, error=None):
-    """记录详细的请求信息"""
-    # 忽略状态检查请求的日志
-    if "/status/" in str(request.url):
-        return
-        
-    try:
-        info = {
-            'timestamp': datetime.now().isoformat(),
-            'method': request.method,
-            'url': str(request.url),
-            'client_host': request.client.host,
-            'client_port': request.client.port,
-            'headers': dict(request.headers),
-            'path_params': request.path_params,
-            'query_params': str(request.query_params),
-            'status_code': response_status
-        }
-        
-        if error:
-            info['error'] = str(error)
-            logger.error(f"Request failed: {json.dumps(info, indent=2)}")
-        else:
-            logger.info(f"Request processed: {json.dumps(info, indent=2)}")
-            
-    except Exception as e:
-        logger.error(f"Error logging request: {str(e)}")
+async def log_request_info(request, response_status: Optional[int] = None, response_body: Optional[str] = None):
+    """Log detailed request and response information"""
+    # Get request information
+    request_info = {
+        'method': request.method,
+        'url': str(request.url),
+        'client_host': request.client.host if request.client else None,
+        'headers': dict(request.headers),
+        'path_params': request.path_params,
+        'query_params': dict(request.query_params),
+        'timestamp': datetime.utcnow().isoformat(),
+    }
 
-# 创建全局日志记录器
+    # Try to get request body
+    try:
+        body = await request.body()
+        if body:
+            request_info['body'] = body.decode()
+    except Exception as e:
+        request_info['body_error'] = str(e)
+
+    # Add response information if available
+    if response_status is not None:
+        request_info['response_status'] = response_status
+    if response_body is not None:
+        request_info['response_body'] = response_body
+
+    # Log the information
+    logger = logging.getLogger('AIClinic')
+    logger.info(
+        'Request/Response Info: %s',
+        json.dumps(request_info, ensure_ascii=False, indent=2)
+    )
+
+# Create a global logger
 logger = setup_logger()

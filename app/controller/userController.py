@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Response, Request, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -52,7 +52,7 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "507f1f77bcf86cd799439011",
                 "username": "johndoe",
@@ -61,6 +61,12 @@ class UserResponse(BaseModel):
                 "created_at": "2025-04-10T12:00:00"
             }
         }
+
+class PaginatedUserResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[UserResponse]
 
 def generate_mfa_code(username: str = None):
     """Generate a 6-digit verification code
@@ -230,24 +236,41 @@ async def verify_mfa(
     )
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id), "role": user.role.value, "username": user.username}
 
-@router.get("/users", response_model=List[UserResponse],
-    summary="Get all users",
-    description="Get list of all users. Requires admin role.")
-async def get_users(current_user: User = Depends(get_admin_user)):
+@router.get("/users", response_model=PaginatedUserResponse,
+    summary="Get paginated user list",
+    description="Get a paginated list of all users. Requires admin role.")
+async def get_users(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    current_user: User = Depends(get_admin_user)
+):
     """
     Retrieve a list of all registered users.
 
     This endpoint requires admin privileges.
-    Returns a list of users with their details (excluding passwords).
+    Returns a paginated list of users with their details (excluding passwords).
     """
-    users = User.objects.all()
-    return [UserResponse(
-        id=str(user.id),
-        username=user.username,
-        email=user.email,
-        role=user.role,
-        created_at=user.created_at
-    ) for user in users]
+    # Get total count
+    total = User.objects().count()
+
+    # Get paginated users
+    skip = (page - 1) * page_size
+    users = User.objects().skip(skip).limit(page_size)
+
+    return PaginatedUserResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            UserResponse(
+                id=str(user.id),
+                username=user.username,
+                email=user.email,
+                role=user.role,
+                created_at=user.created_at
+            ) for user in users
+        ]
+    )
 
 @router.get("/user/{user_id}", response_model=UserResponse,
     summary="Get user details",
