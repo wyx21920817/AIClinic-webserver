@@ -16,17 +16,28 @@ def create_app():
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
-        """记录所有请求和响应"""
+        """Log all requests and responses"""
         start_time = time.time()
         
         try:
             response = await call_next(request)
             process_time = time.time() - start_time
             
-            # 记录请求信息
-            log_request_info(logger, request, response.status_code)
+            # Get response body
+            response_body = b""
+            async for chunk in response.body_iterator:
+                response_body += chunk
             
-            # 记录处理时间
+            # Create an async generator for the response body
+            async def body_iterator():
+                yield response_body
+            
+            response.body_iterator = body_iterator()
+            
+            # Log request and response info
+            await log_request_info(request, response.status_code, response_body.decode())
+            
+            # Log processing time
             logger.info(f"Request processed in {process_time:.2f} seconds")
             
             return response
@@ -36,7 +47,7 @@ def create_app():
             logger.error(f"Request failed after {process_time:.2f} seconds")
             logger.error(f"Error details: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
-            log_request_info(logger, request, 500, error=str(e))
+            await log_request_info(request, 500)
             raise
 
     # Enable CORS
