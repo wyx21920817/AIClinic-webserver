@@ -68,11 +68,11 @@ async def get_audit_logs(
             id=str(log.id),
             timestamp=log.timestamp,
             user_id=log.user_id,
-            username=log.username or "system",  # 如果username为None，使用"system"
+            username=log.username or "system",  # If username is None, use "system"
             action=log.action,
             resource_type=log.resource_type,
-            resource_id=log.resource_id or "",  # 如果resource_id为None，使用空字符串
-            details=str(log.details) if log.details else ""  # 确保details是字符串
+            resource_id=log.resource_id or "",  # If resource_id is None, use empty string
+            details=str(log.details) if log.details else ""  # Ensure details is a string
         ))
     
     # Add pagination headers

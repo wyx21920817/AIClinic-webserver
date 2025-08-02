@@ -67,8 +67,8 @@ def upload_dicom_file(file_path, token):
             f"{ORTHANC_SERVER_URL}/instances",
             headers=headers,
             data=dicom_content,
-            verify=False,  # 如果是自签名证书，可能需要这个
-            timeout=(5, 30)  # 连接超时和读取超时
+            verify=False,  # May be needed for self-signed certificates
+            timeout=(5, 30)  # Connection and read timeout
         )
         
         # Log response details
@@ -76,7 +76,7 @@ def upload_dicom_file(file_path, token):
         logger.debug(f"Orthanc upload response headers: {response.headers}")
         logger.debug(f"Orthanc upload response text: {response.text}")
         
-        if response.status_code in [200, 201]:  # 接受 200 或 201
+        if response.status_code in [200, 201]:  # Accept 200 or 201
             logger.info(f"Successfully uploaded DICOM file to Orthanc: {file_path}")
             return response.json()
         else:
@@ -87,7 +87,7 @@ def upload_dicom_file(file_path, token):
     except Exception as e:
         error_msg = f"Error uploading DICOM file: {str(e)}"
         logger.error(error_msg)
-        logger.error(f"Full error: {traceback.format_exc()}")  # 添加完整的错误追踪
+        logger.error(f"Full error: {traceback.format_exc()}")  # Add complete error traceback
         return {"error": error_msg}
 
 def upload_dicom_folder(folder_path, token):
@@ -197,12 +197,12 @@ def modify_instance_metadata(instance_id, metadata, token):
         headers = get_headers(token)
         headers['Content-Type'] = 'application/json'
         
-        # 使用私有 tags 来存储自定义信息
+        # Use private tags to store custom information
         dicom_tags = {
            
-            "0009,1010": metadata.get('Notes', ''),  # 私有tag存储Notes
-            "0009,1011": metadata.get('Tags', ''),   # 私有tag存储Tags
-            "0020,4000": metadata.get('Notes', '')   # 同时存在ImageComments中以便兼容
+            "0009,1010": metadata.get('Notes', ''),  # Private tag for storing Notes
+            "0009,1011": metadata.get('Tags', ''),   # Private tag for storing Tags
+            "0020,4000": metadata.get('Notes', '')   # Also store in ImageComments for compatibility
         }
         
         url = f"{ORTHANC_SERVER_URL}/instances/{instance_id}/modify"
@@ -217,7 +217,7 @@ def modify_instance_metadata(instance_id, metadata, token):
             "PrivateCreator": "WebServer", 
         }
         
-        # 先看看修改前的实例列表
+        # Check instance list before modification
         instances_url = f"{ORTHANC_SERVER_URL}/instances"
         instances_response = requests.get(instances_url, headers=headers)
         if instances_response.status_code == 200:
@@ -234,19 +234,19 @@ def modify_instance_metadata(instance_id, metadata, token):
         print(f"Response content length: {len(response.content)}")
         print(f"First 200 bytes of response: {response.content[:200]}")
         
-        # 再看看修改后的实例列表
+        # Check instance list after modification
         instances_response = requests.get(instances_url, headers=headers)
         if instances_response.status_code == 200:
             print(f"Current instances after modify: {instances_response.json()}")
         
-        # 检查修改是否成功
+        # Check if modification was successful
         if response.status_code != 200:
             print(f"Failed to modify instance metadata: {response.status_code}")
             return None
             
         print("Successfully modified instance metadata, uploading modified instance...")
         
-        # 尝试直接把返回的 DICOM 数据上传为新实例
+        # Try to upload returned DICOM data as new instance
         upload_url = f"{ORTHANC_SERVER_URL}/instances"
         upload_headers = headers.copy()
         upload_headers['Content-Type'] = 'application/dicom'
@@ -262,7 +262,7 @@ def modify_instance_metadata(instance_id, metadata, token):
             
         print(f"Upload response content: {upload_response.json()}")
         
-        # 获取当前所有实例列表
+        # Get current list of all instances
         instances_response = requests.get(instances_url, headers=headers)
         current_instances = []
         if instances_response.status_code == 200:
@@ -343,7 +343,7 @@ def get_patient_studies(patient_id: str, token: str):
         
         headers = get_headers(token)
         
-        # 直接获取患者信息
+        # Get patient information directly
         response = requests.get(
             f"{ORTHANC_SERVER_URL}/patients/{patient_id}",
             headers=headers
@@ -358,7 +358,7 @@ def get_patient_studies(patient_id: str, token: str):
         studies = patient_data.get('Studies', [])
         study_details = []
         
-        # 获取每个研究的详细信息
+        # Get detailed information for each study
         for study_id in studies:
             study_response = requests.get(
                 f"{ORTHANC_SERVER_URL}/studies/{study_id}",
@@ -425,7 +425,7 @@ def get_patient_instances(patient_id: str, token: str):
         print(f"[Orthanc] Getting patient info for ID: {patient_id}")
         print(f"[Orthanc] Using headers: {headers}")
         
-        # 获取患者信息
+        # Get patient information
         response = requests.get(
             f"{ORTHANC_SERVER_URL}/patients/{patient_id}",
             headers=headers,
@@ -441,7 +441,7 @@ def get_patient_instances(patient_id: str, token: str):
             studies = patient_data.get('Studies', [])
             print(f"[Orthanc] Found {len(studies)} studies for patient")
             
-            # 获取所有studies
+            # Get all studies
             for study_id in studies:
                 print(f"[Orthanc] Getting study {study_id}")
                 study_response = requests.get(
@@ -456,7 +456,7 @@ def get_patient_instances(patient_id: str, token: str):
                     series_list = study_data.get('Series', [])
                     print(f"[Orthanc] Found {len(series_list)} series in study {study_id}")
                     
-                    # 获取所有series
+                    # Get all series
                     for series_id in series_list:
                         print(f"[Orthanc] Getting series {series_id}")
                         series_response = requests.get(
@@ -471,7 +471,7 @@ def get_patient_instances(patient_id: str, token: str):
                             instance_list = series_data.get('Instances', [])
                             print(f"[Orthanc] Found {len(instance_list)} instances in series {series_id}")
                             
-                            # 获取所有instances
+                            # Get all instances
                             for instance_id in instance_list:
                                 print(f"[Orthanc] Getting instance {instance_id}")
                                 instance_response = requests.get(
@@ -556,7 +556,7 @@ def search_patients(query: str, token: str):
         headers = get_headers(token)
         headers['Content-Type'] = 'application/json'
         
-        # 如果没有查询参数，获取所有患者
+        # If no query parameters, get all patients
         if not query:
             response = requests.get(
                 f"{ORTHANC_SERVER_URL}/patients?expand",
@@ -566,7 +566,7 @@ def search_patients(query: str, token: str):
                 return response.json()
             return []
 
-        # 如果有查询参数，先获取所有患者然后在代码中过滤
+        # If query parameters exist, get all patients first then filter in code
         response = requests.get(
             f"{ORTHANC_SERVER_URL}/patients?expand",
             headers=headers
@@ -578,7 +578,7 @@ def search_patients(query: str, token: str):
         all_patients = response.json()
         query = query.lower()
         
-        # 在代码中进行模糊匹配
+        # Perform fuzzy matching in code
         return [p for p in all_patients if 
                 (p.get('MainDicomTags', {}).get('PatientID', '').lower().find(query) != -1) or
                 (p.get('MainDicomTags', {}).get('PatientName', '').lower().find(query) != -1)]

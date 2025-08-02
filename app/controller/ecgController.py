@@ -106,7 +106,7 @@ async def validate_ecg_file(file: UploadFile) -> bool:
             detail="文件内容为空"
         )
     
-    # 检查文件大小（例如：最大50MB）
+    # Check file size (e.g., max 50MB)
     max_size = 50 * 1024 * 1024  # 50MB in bytes
     if len(contents) > max_size:
         raise HTTPException(
@@ -114,7 +114,7 @@ async def validate_ecg_file(file: UploadFile) -> bool:
             detail="文件大小超过限制（最大50MB）"
         )
     
-    # 将文件指针重置到开始位置
+    # Reset file pointer to start
     await file.seek(0)
     return True
 
@@ -303,7 +303,7 @@ async def update_ecg_file(
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         print(f"Retrieved instance details from Orthanc: {instance_details}")  # Debug
         
-        # 确保instanceIDs字段存在
+        # Ensure instanceIDs field exists
         if not hasattr(ecg_file, 'instanceIDs') or ecg_file.instanceIDs is None:
             ecg_file.instanceIDs = [ecg_file.dicom_uid]
             ecg_file.save()
@@ -406,7 +406,7 @@ async def upload_ecg_file(
         
         print(f"File info - filename: {file.filename}, content_type: {getattr(file, 'content_type', 'unknown')}")  # Debug
         
-        # 获取其他字段
+        # Get other fields
         notes = form.get("notes", "")
         tags = form.get("tags", "")
         print(f"Additional fields - notes: {notes}, tags: {tags}")  # Debug
@@ -415,68 +415,63 @@ async def upload_ecg_file(
         contents = await file.read()
         print(f"Read {len(contents)} bytes")  # Debug
         
-        # 创建临时文件
+        # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.dcm') as temp_file:
             temp_file.write(contents)
             temp_path = temp_file.name
 
         try:
-            # 上传到Orthanc服务器
+            # Upload to Orthanc server
             orthanc_response = upload_dicom_file(temp_path, token=current_user.token)
             if not orthanc_response:
                 # Get the error message from the response if available
-                error_detail = "Failed to upload file to Orthanc server"
-                if isinstance(orthanc_response, dict) and 'error' in orthanc_response:
-                    error_detail += f": {orthanc_response['error']}"
+                error_msg = "Failed to upload DICOM file to Orthanc"
                 raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=error_detail
+                    status_code=500,
+                    detail=error_msg
                 )
             
-            # 从Orthanc响应中获取DICOM UID
-            dicom_uid = orthanc_response.get("ID", "")  # Orthanc返回的实例ID
+            # Get DICOM UID from Orthanc response
+            dicom_uid = orthanc_response.get("ID", "")  # Instance ID returned by Orthanc
             
-            # 处理标签
+            # Process tags
             tag_list = []
             if tags:
                 tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
                 
-            # 创建数据库记录
+            # Create database record
             patient = Patient.objects(id=user_id).first()
             if not patient:
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="patient _NOT_FOUND"
+                    status_code=404,
+                    detail="Patient not found"
                 )
-                
+
             # Get current instances for this patient
-            existing_ecg = EcgFile.objects(patient_id=patient).first()
             current_instances = []
-            if existing_ecg and existing_ecg.instanceIDs:
-                current_instances = existing_ecg.instanceIDs
-            
-            # Add new instance ID
-            if dicom_uid not in current_instances:
-                current_instances.append(dicom_uid)
-            
+            try:
+                existing_file = ECGFile.objects(user_id=user_id).first()
+                if existing_file and existing_file.instanceIDs:
+                    current_instances = existing_file.instanceIDs
+            except Exception as e:
+                logger.error(f"Error getting existing instances: {e}")
+                # Continue with empty list if there's an error
+                pass
+
+            # Add new instance
+            current_instances.append(dicom_uid)
+
             # Create or update ECG file record
-            if existing_ecg:
-                existing_ecg.tags = tag_list
-                existing_ecg.notes = notes
-                existing_ecg.instanceIDs = current_instances
-                ecg_file = existing_ecg
-            else:
-                ecg_file = EcgFile(
-                    patient_id=patient,
-                    dicom_uid=dicom_uid,
-                    uploaded_by=current_user,
-                    tags=tag_list,
-                    notes=notes,
-                    instanceIDs=current_instances
-                )
+            ecg_file = ECGFile(
+                user_id=user_id,
+                filename=file.filename,
+                dicom_uid=dicom_uid,
+                notes=notes,
+                tags=tag_list,
+                instanceIDs=current_instances
+            )
             ecg_file.save()
-            
-            # Log successful upload
+
             AuditLog.log_data_access(
                 user_id=str(current_user.id),
                 action="upload_success",
@@ -498,7 +493,7 @@ async def upload_ecg_file(
                 "instanceIDs": current_instances
             }
         finally:
-            # 清理临时文件
+            # Clean up temporary files
             os.unlink(temp_path)
             
     except Exception as e:
@@ -575,21 +570,21 @@ async def get_patient_ecg_files(
                 detail="Patient not found"
             )
 
-        # 在 Orthanc 服务器上获取该病人的所有实例
+        # Get all instances for this patient from Orthanc server
         instances = get_patient_instances(patient.patient_id, token=current_user.token)
         if not instances:
             return []
 
-        # 直接返回所有实例
+        # Return all instances directly
         ecg_files = []
         for instance in instances:
-            # 从DICOM标签中获取实例创建时间
+            # Get instance creation time from DICOM tags
             dicom_date = instance.get('MainDicomTags', {}).get('InstanceCreationDate')
             dicom_time = instance.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
-            if '.' in dicom_time:  # 处理可能带有小数点的时间格式
-                dicom_time = dicom_time.split('.')[0]  # 只取时分秒部分
+            if '.' in dicom_time:  # Handle time format that may contain decimal points
+                dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
             
-            # 解析DICOM日期时间格式 (YYYYMMDD HHMMSS)
+            # Parse DICOM datetime format (YYYYMMDD HHMMSS)
             try:
                 if dicom_date:
                     created_at = datetime.strptime(f"{dicom_date}{dicom_time}", '%Y%m%d%H%M%S')
@@ -600,7 +595,7 @@ async def get_patient_ecg_files(
                 created_at = datetime.now()
                 
             ecg_files.append(ECGFileResponse(
-                file_id=instance['ID'],  # 使用 Orthanc 的 instance ID 作为 file_id
+                file_id=instance['ID'],  # Use Orthanc's instance ID as file_id
                 user_id=patient_id,
                 filename=instance.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                 created_at=created_at,

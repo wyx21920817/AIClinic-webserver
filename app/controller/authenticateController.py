@@ -14,10 +14,10 @@ router = APIRouter(
     dependencies=[]
 )
 
-# 配置日志记录器
+# Configure logger
 logger = logging.getLogger(__name__)
 
-# 从环境变量获取密钥
+# Get key from environment variables
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 
 @router.get('/verify-token')
@@ -37,14 +37,14 @@ async def verify_token(authorization: str = Header(None)):
         )
     
     try:
-        # 解析token
+        # Parse token
         token = authorization.split(' ')[1] if ' ' in authorization else authorization
         logger.debug(f"Processing token verification")
         
-        # 验证token
+        # Validate token
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
         
-        # 检查token是否过期
+        # Check if token is expired
         exp = payload.get('exp')
         if exp and datetime.utcnow().timestamp() > exp:
             logger.warning("Token has expired")
@@ -53,19 +53,19 @@ async def verify_token(authorization: str = Header(None)):
                 content={"detail": "Token has expired"}
             )
         
-        # 构建基本响应
+        # Build basic response
         response_data = {
             "granted": True,
-            "validity": 3600,  # 默认缓存1小时
-            "labels": ["view"],  # 基本查看权限
+            "validity": 3600,  # Default cache 1 hour
+            "labels": ["view"],  # Basic view permission
             "user": payload.get('sub', 'unknown'),
             "is_temp": False
         }
         
-        # 处理临时token
+        # Handle temporary token
         if payload.get('temp', False) and payload.get('orthanc_access', False):
             response_data.update({
-                "validity": 60,  # 临时token只缓存1分钟
+                "validity": 60,  # Temporary token cached for 1 minute only
                 "labels": ["view", "upload", "modify", "all"],
                 "user": "orthanc_temp_access",
                 "is_temp": True
@@ -73,7 +73,7 @@ async def verify_token(authorization: str = Header(None)):
             logger.info("Processed temporary token")
             return JSONResponse(content=response_data)
         
-        # 处理普通token
+        # Handle regular token
         sub = payload.get('sub')
         if not sub:
             logger.warning("Token missing subject claim")
@@ -82,7 +82,7 @@ async def verify_token(authorization: str = Header(None)):
                 content={"detail": "Invalid token structure"}
             )
         
-        # 设置权限
+        # Set permissions
         role = payload.get('role', '')
         if role in ['doctor', 'admin']:
             response_data['labels'].append("upload")
@@ -123,18 +123,19 @@ async def verify_token(authorization: str = Header(None)):
 @router.get('/temp-token')
 async def get_temp_token():
     """
-    生成一个有效期为1分钟的临时token，具有查询和修改Orthanc文件的权限
+    Generate a temporary token with a validity period of 1 minute, 
+    which has the permission to query and modify Orthanc files
     """
     try:
-        # 创建token payload
+        # Create token payload
         payload = {
-            'exp': datetime.utcnow() + timedelta(minutes=1),  # 1分钟后过期
+            'exp': datetime.utcnow() + timedelta(minutes=1),  # Expires in 1 minute
             'iat': datetime.utcnow(),
-            'temp': True,  # 标记为临时token
-            'orthanc_access': True  # 标记这是用于Orthanc访问的token
+            'temp': True,  # Mark as temporary token
+            'orthanc_access': True  # Mark this token for Orthanc access
         }
         
-        # 生成token
+        # Generate token
         token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
         
         # 记录审计日志
@@ -148,7 +149,7 @@ async def get_temp_token():
         return JSONResponse(
             content={
                 "token": token,
-                "expires_in": 60,  # 60秒
+                "expires_in": 60,  # 60 seconds
                 "token_type": "Bearer"
             },
             status_code=200

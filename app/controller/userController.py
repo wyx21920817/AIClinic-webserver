@@ -82,14 +82,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         
-        # 检查是否是临时token
+        # Check if it's a temporary token
         if payload.get('temp', False):
             raise HTTPException(
                 status_code=401,
                 detail="Temporary tokens cannot be used for user authentication"
             )
             
-        # 检查sub字段
+        # Check sub field
         if "sub" not in payload:
             raise HTTPException(
                 status_code=401,
@@ -138,7 +138,7 @@ async def login(
     if not user or not user.verify_password(password):
         # Log failed login attempt
         AuditLog.log_auth(
-            user_id="anonymous",  # 未登录用户使用anonymous
+            user_id="anonymous",  # Use 'anonymous' for unauthenticated users
             action="login_attempt",
             status="failure",
             details="Invalid credentials",
@@ -482,7 +482,7 @@ async def register(
         user = User(
             username=username,
             email=email,
-            role=UserRole.DOCTOR  # 新注册用户默认为医生角色
+            role=UserRole.DOCTOR  # New users default to doctor role
         )
         user.set_password(password)
         user.save()
