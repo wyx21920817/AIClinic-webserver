@@ -450,7 +450,7 @@ async def upload_ecg_file(
             # Get current instances for this patient
             current_instances = []
             try:
-                existing_file = EcgFile.objects(user_id=user_id).first()
+                existing_file = EcgFile.objects(patient_id=user_id).first()
                 if existing_file and existing_file.instanceIDs:
                     current_instances = existing_file.instanceIDs
             except Exception as e:
@@ -459,10 +459,10 @@ async def upload_ecg_file(
             current_instances.append(dicom_uid)
 
             # Create or update ECG file record
-            ecg_file = ECGFile(
-                user_id=user_id,
-                filename=file.filename,
+            ecg_file = EcgFile(
+                patient_id=user_id,
                 dicom_uid=dicom_uid,
+                uploaded_by=current_user.id,
                 notes=notes,
                 tags=tag_list,
                 instanceIDs=current_instances
