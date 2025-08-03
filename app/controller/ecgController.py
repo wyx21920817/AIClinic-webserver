@@ -498,9 +498,12 @@ async def upload_ecg_file(
             # Get current instances for this patient using Orthanc patient_id
             current_instances = []
             try:
-                existing_file = EcgFile.objects(patient_id=patient.patient_id).first()
-                if existing_file and existing_file.instanceIDs:
-                    current_instances = existing_file.instanceIDs
+                # Get all existing files for this patient
+                existing_files = EcgFile.objects(patient_id=str(patient.patient_id)).all()
+                # Collect all instance IDs
+                for existing_file in existing_files:
+                    if existing_file.instanceIDs:
+                        current_instances.extend(existing_file.instanceIDs)
             except Exception as e:
                 logger.error(f"Error getting existing instances: {e}")
                 # Continue with empty list if there's an error
@@ -508,12 +511,13 @@ async def upload_ecg_file(
 
             # Create or update ECG file record using Orthanc patient_id
             ecg_file = EcgFile(
-                patient_id=patient.patient_id,
+                patient_id=str(patient.patient_id),  # Convert to string to avoid ObjectId validation
                 dicom_uid=dicom_uid,
                 uploaded_by=current_user.id,
                 notes=notes,
                 tags=tag_list,
-                instanceIDs=current_instances
+                instanceIDs=current_instances,
+                filename=file.filename
             )
             ecg_file.save()
 
@@ -621,37 +625,38 @@ async def get_patient_ecg_files(
             )
 
         # Get ECG files from database using Orthanc patient_id
-        ecg_files_db = EcgFile.objects(patient_id=patient.patient_id).all()
+        ecg_files_db = EcgFile.objects(patient_id=str(patient.patient_id)).all()
         ecg_files = []
         for ecg_file in ecg_files_db:
             instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
-            # Get instance creation time from DICOM tags
-            dicom_date = instance.get('MainDicomTags', {}).get('InstanceCreationDate')
-            dicom_time = instance.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
-            if '.' in dicom_time:  # Handle time format that may contain decimal points
-                dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
-            
-            # Parse DICOM datetime format (YYYYMMDD HHMMSS)
-            try:
-                if dicom_date:
-                    created_at = datetime.strptime(f"{dicom_date}{dicom_time}", '%Y%m%d%H%M%S')
-                else:
-                    created_at = datetime.now()
-            except ValueError:
-                logger.warning(f"Invalid DICOM date/time format: {dicom_date} {dicom_time}. Using current time.")
-                created_at = datetime.now()
+            if instance_details:
+                # Get instance creation time from DICOM tags
+                dicom_date = instance_details.get('MainDicomTags', {}).get('InstanceCreationDate')
+                dicom_time = instance_details.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
+                if '.' in dicom_time:  # Handle time format that may contain decimal points
+                    dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
                 
-            ecg_files.append(ECGFileResponse(
-                file_id=instance['ID'],  # Use Orthanc's instance ID as file_id
-                user_id=patient_id,
-                filename=instance.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
-                created_at=created_at,
-                notes='',
-                tags=[],
-                dicom_uid=instance['ID'],
-                content=str(instance),
-                instanceIDs=[instance['ID']]
-            ))
+                # Parse DICOM datetime format (YYYYMMDD HHMMSS)
+                try:
+                    if dicom_date:
+                        created_at = datetime.strptime(f"{dicom_date}{dicom_time}", '%Y%m%d%H%M%S')
+                    else:
+                        created_at = datetime.now()
+                except ValueError:
+                    logger.warning(f"Invalid DICOM date/time format: {dicom_date} {dicom_time}. Using current time.")
+                    created_at = datetime.now()
+                    
+                ecg_files.append(ECGFileResponse(
+                    file_id=str(ecg_file.id),  # Use MongoDB ID as file_id
+                    user_id=patient_id,
+                    filename=ecg_file.filename or instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+                    created_at=created_at,
+                    notes=ecg_file.notes,
+                    tags=ecg_file.tags,
+                    dicom_uid=ecg_file.dicom_uid,
+                    content=str(instance_details),
+                    instanceIDs=ecg_file.instanceIDs
+                ))
 
         return ecg_files
 
