@@ -481,18 +481,24 @@ async def upload_ecg_file(
             if tags:
                 tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
                 
-            # Create database record
+            # Get patient record to get Orthanc patient_id
             patient = Patient.objects(id=user_id).first()
             if not patient:
                 raise HTTPException(
                     status_code=404,
                     detail="Patient not found"
                 )
+            
+            if not patient.patient_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Patient does not have an Orthanc ID"
+                )
 
-            # Get current instances for this patient
+            # Get current instances for this patient using Orthanc patient_id
             current_instances = []
             try:
-                existing_file = EcgFile.objects(patient_id=user_id).first()
+                existing_file = EcgFile.objects(patient_id=patient.patient_id).first()
                 if existing_file and existing_file.instanceIDs:
                     current_instances = existing_file.instanceIDs
             except Exception as e:
@@ -500,9 +506,9 @@ async def upload_ecg_file(
                 # Continue with empty list if there's an error
             current_instances.append(dicom_uid)
 
-            # Create or update ECG file record
+            # Create or update ECG file record using Orthanc patient_id
             ecg_file = EcgFile(
-                patient_id=user_id,
+                patient_id=patient.patient_id,
                 dicom_uid=dicom_uid,
                 uploaded_by=current_user.id,
                 notes=notes,
@@ -594,7 +600,7 @@ async def get_patient_ecg_files(
     try:
         # Log data access attempt
         
-        # Verify patient exists
+        # Verify patient exists and has Orthanc ID
         try:
             from bson import ObjectId
             patient = Patient.objects(id=ObjectId(patient_id)).first()
@@ -608,15 +614,17 @@ async def get_patient_ecg_files(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Patient not found"
             )
+        if not patient.patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Patient does not have an Orthanc ID"
+            )
 
-        # Get all instances for this patient from Orthanc server
-        instances = get_patient_instances(patient.patient_id, token=current_user.token)
-        if not instances:
-            return []
-
-        # Return all instances directly
+        # Get ECG files from database using Orthanc patient_id
+        ecg_files_db = EcgFile.objects(patient_id=patient.patient_id).all()
         ecg_files = []
-        for instance in instances:
+        for ecg_file in ecg_files_db:
+            instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
             # Get instance creation time from DICOM tags
             dicom_date = instance.get('MainDicomTags', {}).get('InstanceCreationDate')
             dicom_time = instance.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
