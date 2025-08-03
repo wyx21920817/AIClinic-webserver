@@ -70,13 +70,9 @@ async def log_request_info(request, response_status: Optional[int] = None, respo
         'timestamp': datetime.utcnow().isoformat(),
     }
 
-    # Try to get request body
-    try:
-        body = await request.body()
-        if body:
-            request_info['body'] = body.decode()
-    except Exception as e:
-        request_info['body_error'] = str(e)
+    # Log form data type if available
+    content_type = request.headers.get('content-type', '')
+    request_info['content_type'] = content_type
 
     # Add response information if available
     if response_status is not None:

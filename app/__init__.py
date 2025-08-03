@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 from mongoengine import connect, disconnect
 from app.utils.logger_config import logger, log_request_info
 from .core.config import settings
@@ -20,17 +21,19 @@ def create_app():
         start_time = time.time()
         
         try:
+            # Log basic request info
+            logger.info(f"Request: {request.method} {request.url.path}")
+            
+            # Get response
             response = await call_next(request)
             process_time = time.time() - start_time
             
-            # 不尝试读取响应体
-            decoded_body = "<Response>"
-            
-            # Log request info
-            logger.info(f"Request: {request.method} {request.url.path}")
+            # Log response info
             logger.info(f"Status: {response.status_code} - Time: {process_time:.2f}s - Client: {request.client.host if request.client else 'unknown'}")
             
-            # Return the original response without modification
+            # Log detailed request info without response body
+            await log_request_info(request)
+            
             return response
             
         except Exception as e:
