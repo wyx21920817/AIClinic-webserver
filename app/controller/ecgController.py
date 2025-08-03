@@ -510,7 +510,6 @@ async def upload_ecg_file(
             # Create or update ECG file record using MongoDB patient_id
             ecg_file = EcgFile(
                 patient_id=str(patient.id),
-                filename=file.filename,
                 dicom_uid=dicom_uid,
                 instanceIDs=current_instances,
                 notes=notes,
@@ -649,7 +648,7 @@ async def get_patient_ecg_files(
                         ecg_files.append(ECGFileResponse(
                             file_id=str(ecg_file.id),  # Use MongoDB ID as file_id
                             user_id=patient_id,
-                            filename=ecg_file.filename or instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+                            filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                             created_at=created_at,
                             notes=ecg_file.notes,
                             tags=ecg_file.tags,
