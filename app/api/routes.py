@@ -1,15 +1,15 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks, Response, Request
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import shutil
 import uuid
+import os
+import json
 from pathlib import Path
-from pydicom.dataset import Dataset
 from pydicom import dcmread
 from app.core.config import settings
-from app.services.dicom_service import dicom_service
 from app.utils.logger_config import logger
-import os
+from app.controller.utils.orthanc import upload_dicom_file
 import requests
 
 router = APIRouter()
@@ -44,33 +44,44 @@ def process_image_task(file_id: str, input_file: Path, output_dir: Path):
         }
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """上传DICOM文件到Orthanc服务器"""
+def upload_file(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None
+):
     temp_dir = None
     try:
-        # 获取临时token
+        # 确保文件被正确关闭
         try:
-            # 添加适当的headers，如果需要
+            # 获取临时token
             headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
-            response = requests.get(
-                'http://52.63.231.27:8000/api/auth/temp-token',
-                headers=headers,
-                verify=False  # 如果是自签名证书可能需要这个
-            )
-            if response.status_code == 200:
-                temp_token = response.json().get('token')
+            try:
+                response = requests.get(
+                    'http://52.63.231.27:8001/api/auth/temp-token',
+                    headers=headers,
+                    verify=False,
+                    timeout=5.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                temp_token = data.get('token')
                 if not temp_token:
                     raise ValueError("Token not found in response")
                 logger.info("Successfully obtained temporary token")
-            else:
-                logger.error(f"Failed to get temp token. Status: {response.status_code}, Response: {response.text}")
+            except requests.Timeout:
+                logger.error("Token request timed out after 5 seconds")
+                raise HTTPException(status_code=504, detail="获取临时令牌超时，请稍后重试")
+            except requests.HTTPError as e:
+                logger.error(f"Failed to get temp token. Status: {e.response.status_code}, Response: {e.response.text}")
                 raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"获取临时令牌失败: {response.text}"
+                    status_code=e.response.status_code,
+                    detail=f"获取临时令牌失败: {e.response.text}"
                 )
+            except requests.RequestException as e:
+                logger.error(f"Network error while getting token: {str(e)}")
+                raise HTTPException(status_code=503, detail="无法连接到认证服务器，请检查网络连接")
         except Exception as e:
             logger.error(f"获取临时令牌失败: {str(e)}")
             raise HTTPException(status_code=500, detail=f"获取临时令牌失败: {str(e)}")
@@ -78,60 +89,102 @@ async def upload_file(file: UploadFile = File(...)):
         # 生成唯一的文件ID并创建临时目录
         file_id = str(uuid.uuid4())
         temp_dir = settings.UPLOAD_DIR / file_id
-        temp_dir.mkdir(exist_ok=True)
+        temp_dir.mkdir(exist_ok=True, parents=True)
         logger.info(f"创建临时目录: {temp_dir}")
         
         # 保存上传的文件
         temp_file = temp_dir / file.filename
         logger.info(f"保存上传文件: {temp_file}")
-        with temp_file.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
         
         try:
+            # 保存上传的文件
+            contents = file.file.read()
+            with temp_file.open('wb') as f:
+                f.write(contents)
+            
             # 验证是否为DICOM文件
-            dicom_data = dcmread(temp_file)
-            logger.info(f"Valid DICOM file detected: {file.filename}")
-            
-            # 上传到Orthanc服务器
-            from app.controller.utils.orthanc import upload_dicom_file
-            response = upload_dicom_file(str(temp_file), temp_token)
-            
-            if isinstance(response, dict) and 'error' in response:
-                logger.error(f"Orthanc upload failed: {response['error']}")
-                raise HTTPException(status_code=500, detail=response['error'])
+            try:
+                dicom_data = dcmread(temp_file)
+                logger.info(f"Valid DICOM file detected: {file.filename}")
                 
-            # 记录实例元数据
-            instance_id = response.get('ID')
-            parent_info = {
-                'patient_id': response.get('ParentPatient'),
-                'study_id': response.get('ParentStudy'),
-                'series_id': response.get('ParentSeries')
-            }
-            
-            logger.info(f"Successfully uploaded DICOM instance: {instance_id}")
-            logger.debug(f"Parent information: {parent_info}")
-            
-            # 返回成功响应
-            return JSONResponse({
-                "status": "success",
-                "message": "DICOM文件已上传到Orthanc服务器",
-                "instance_id": instance_id,
-                "parent_info": parent_info
-            })
-
+                # 检查必需的DICOM标签
+                required_tags = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'SOPInstanceUID']
+                missing_tags = [tag for tag in required_tags if not hasattr(dicom_data, tag)]
+                if missing_tags:
+                    error_msg = f"缺少必需的DICOM标签: {', '.join(missing_tags)}"
+                    logger.error(error_msg)
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": error_msg}
+                    )
+                
+                # 上传到Orthanc服务器
+                from app.controller.utils.orthanc import upload_dicom_file
+                try:
+                    response = upload_dicom_file(str(temp_file), temp_token)
+                except Exception as e:
+                    error_msg = f"上传到Orthanc服务器失败: {str(e)}"
+                    logger.error(error_msg)
+                    raise HTTPException(status_code=500, detail=error_msg)
+                
+                if isinstance(response, dict) and 'error' in response:
+                    error_msg = response['error']
+                    logger.error(f"Orthanc upload failed: {error_msg}")
+                    raise HTTPException(status_code=500, detail=error_msg)
+                    
+                # 记录实例元数据
+                instance_id = response.get('ID')
+                parent_info = {
+                    'patient_id': response.get('ParentPatient'),
+                    'study_id': response.get('ParentStudy'),
+                    'series_id': response.get('ParentSeries')
+                }
+                
+                logger.info(f"Successfully uploaded DICOM instance: {instance_id}")
+                logger.debug(f"Parent information: {parent_info}")
+                
+                response_data = {
+                    "status": "success",
+                    "message": "DICOM文件已上传到Orthanc服务器",
+                    "instance_id": instance_id,
+                    "parent_info": parent_info
+                }
+                return JSONResponse(
+                    status_code=200,
+                    content=response_data
+                )
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"DICOM验证或上传失败: {error_msg}")
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": f"无效的DICOM文件或上传失败: {error_msg}"}
+                )
                 
         except Exception as e:
-            logger.error(f"文件验证或上传失败: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"无效的DICOM文件或上传失败: {str(e)}")
+            error_msg = str(e)
+            logger.error(f"文件处理失败: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
             
     except Exception as e:
-        logger.error(f"上传失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        logger.error(f"上传失败: {error_msg}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": error_msg}
+        )
+        
     finally:
+        try:
+            # 确保文件被关闭
+            file.file.close()
+        except Exception as e:
+            logger.error(f"关闭文件失败: {str(e)}")
+        
         # 确保临时目录始终被清理
         if temp_dir is not None and temp_dir.exists():
             try:
-                shutil.rmtree(temp_dir)
+                shutil.rmtree(temp_dir, ignore_errors=True)
                 logger.debug(f"Cleaned up temporary directory: {temp_dir}")
             except Exception as e:
                 logger.error(f"清理临时目录失败: {str(e)}")

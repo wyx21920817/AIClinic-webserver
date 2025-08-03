@@ -23,40 +23,14 @@ def create_app():
             response = await call_next(request)
             process_time = time.time() - start_time
             
-            # Get response body
-            response_body = b""
-            async for chunk in response.body_iterator:
-                response_body += chunk
+            # 不尝试读取响应体
+            decoded_body = "<Response>"
             
-            # Create an async generator for the response body
-            async def body_iterator():
-                yield response_body
-            
-            response.body_iterator = body_iterator()
-            
-            # Log request and response info - handle binary data
-            try:
-                decoded_body = response_body.decode('utf-8')
-            except UnicodeDecodeError:
-                # For binary data, just log the content length
-                decoded_body = f"<Binary data of length {len(response_body)} bytes>"
-            
-            # Log detailed request and response info
-            request_info = {
-                'method': request.method,
-                'path': request.url.path,
-                'status_code': response.status_code,
-                'process_time': f"{process_time:.2f}s",
-                'client': request.client.host if request.client else None,
-                'response': decoded_body[:500] if isinstance(decoded_body, str) else str(decoded_body)[:500]  # Limit response length
-            }
+            # Log request info
             logger.info(f"Request: {request.method} {request.url.path}")
             logger.info(f"Status: {response.status_code} - Time: {process_time:.2f}s - Client: {request.client.host if request.client else 'unknown'}")
-            logger.info(f"Response: {request_info['response']}")
             
-            # Log full details to requests.log
-            await log_request_info(request, response.status_code, decoded_body)
-            
+            # Return the original response without modification
             return response
             
         except Exception as e:
