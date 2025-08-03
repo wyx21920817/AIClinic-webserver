@@ -135,13 +135,11 @@ async def get_ecg_files(
     # Get files from database for this user
     ecg_files = EcgFile.objects(patient_id=user_id).all()
     
-    responses = []
     for ecg_file in ecg_files:
         # Get instance details from Orthanc
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         if instance_details:
             responses.append(ECGFileResponse(
-                file_id=str(ecg_file.dicom_uid),
                 user_id=user_id,
                 filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                 created_at=ecg_file.created_at,
@@ -498,17 +496,8 @@ async def upload_ecg_file(
                     detail="Patient does not have an Orthanc ID"
                 )
 
-            # Get current instances for this patient using MongoDB patient_id
-            current_instances = []
-            try:
-                existing_files = EcgFile.objects(patient_id=str(patient.id)).all()
-                for existing_file in existing_files:
-                    if existing_file.instanceIDs:
-                        current_instances.extend(existing_file.instanceIDs)
-            except Exception as e:
-                logger.error(f"Error getting existing instances: {e}")
-                # Continue with empty list if there's an error
-            current_instances.append(dicom_uid)
+            # For new file upload, we only use the new instance ID
+            current_instances = [dicom_uid]
 
             # Create or update ECG file record using MongoDB patient_id
             ecg_file = EcgFile(
@@ -649,7 +638,7 @@ async def get_patient_ecg_files(
                             created_at = datetime.now()
                             
                         ecg_files.append(ECGFileResponse(
-                            file_id=str(ecg_file.id),  # Use MongoDB ID as file_id
+                            file_id=str(ecg_file.dicom_uid),  # Use MongoDB ID as file_id
                             user_id=patient_id,
                             filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                             created_at=created_at,
