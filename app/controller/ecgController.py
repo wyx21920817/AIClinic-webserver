@@ -141,7 +141,7 @@ async def get_ecg_files(
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         if instance_details:
             responses.append(ECGFileResponse(
-                file_id=str(ecg_file.id),
+                file_id=str(ecg_file.dicom_uid),
                 user_id=user_id,
                 filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                 created_at=ecg_file.created_at,
@@ -471,14 +471,8 @@ async def upload_ecg_file(
                     detail=f"文件上传失败: {orthanc_response['error']}"
                 )
             
-            if not isinstance(orthanc_response, list) or len(orthanc_response) == 0:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"文件上传失败: 无效的上传结果"
-                )
-            
             # Get DICOM UID from Orthanc response
-            dicom_uid = orthanc_response[0].get("ID")
+            dicom_uid = orthanc_response.get("ID")
             if not dicom_uid:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
