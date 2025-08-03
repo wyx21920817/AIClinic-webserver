@@ -361,12 +361,49 @@ async def delete_ecg_file(
         # Log the deletion attempt
         logger.info(f"User {current_user.username} (role: {current_user.role}) attempting to delete ECG file - user_id: {user_id}, instance_id: {instance_id}")
 
-        # Try to delete from Orthanc server
+        # Try to delete from database first
         try:
-            await delete_instance(instance_id, token=current_user.token)
+            ecg_file = EcgFile.objects(patient_id=user_id, dicom_uid=instance_id).first()
+            if ecg_file:
+                ecg_file.delete()
+                logger.info(f"Successfully deleted ECG file record from database - user_id: {user_id}, instance_id: {instance_id}")
+            else:
+                logger.warning(f"No ECG file record found in database - user_id: {user_id}, instance_id: {instance_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete ECG file record from database - user_id: {user_id}, instance_id: {instance_id}, error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete file record from database: {str(e)}"
+            )
+
+        # Then try to delete from Orthanc server
+        try:
+            success = delete_instance(instance_id, token=current_user.token)
+            if not success:
+                logger.error(f"Failed to delete instance from Orthanc - user_id: {user_id}, instance_id: {instance_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to delete instance from Orthanc server"
+                )
             logger.info(f"Successfully deleted ECG file from Orthanc - user_id: {user_id}, instance_id: {instance_id}")
         except Exception as e:
-            logger.warning(f"Failed to delete instance from Orthanc - user_id: {user_id}, instance_id: {instance_id}, error: {str(e)}")
+            logger.error(f"Failed to delete instance from Orthanc - user_id: {user_id}, instance_id: {instance_id}, error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete instance from Orthanc: {str(e)}"
+            )
+        
+        # Log the successful deletion
+        AuditLog.log_data_access(
+            user_id=str(current_user.id),
+            action="delete",
+            resource_type="ecg_file",
+            resource_id=instance_id,
+            details={
+                "patient_id": user_id,
+                "instance_id": instance_id
+            }
+        )
         
         return {"message": "File deleted successfully"}
         
