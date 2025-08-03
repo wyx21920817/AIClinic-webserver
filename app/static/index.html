@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>AI Clinic - DICOM服务测试页面</title>
+    <title>AI Clinic - DICOM Service Test Page</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -82,21 +82,21 @@
     </style>
 </head>
 <body>
-    <h1>AI Clinic - DICOM服务测试页面</h1>
+    <h1>AI Clinic - DICOM Service Test Page</h1>
     
     <div class="container">
         <div class="test-section">
-            <h2>1. 服务状态测试</h2>
-            <button onclick="testHealth()">测试服务状态</button>
+            <h2>1. Service Status Test</h2>
+            <button onclick="testHealth()">Test Service Status</button>
             <div id="healthResponse" class="response"></div>
         </div>
 
         <div class="test-section">
-            <h2>2. CT扫描转DICOM</h2>
+            <h2>2. CT Scan to DICOM Conversion</h2>
             <div class="file-input">
                 <input type="file" id="ctFile">
-                <div class="file-info">支持任意CT扫描文件，无需后缀名</div>
-                <button onclick="convertToDicom()">转换为DICOM</button>
+                <div class="file-info">Supports any CT scan file, no specific extension required</div>
+                <button onclick="convertToDicom()">Convert to DICOM</button>
             </div>
             <div class="progress" id="convertProgress">
                 <div class="progress-bar"></div>
@@ -105,10 +105,10 @@
         </div>
 
         <div class="test-section">
-            <h2>3. DICOM文件上传</h2>
+            <h2>3. DICOM File Upload</h2>
             <div class="file-input">
                 <input type="file" id="dicomFile" accept=".dcm">
-                <button onclick="uploadDicom()">上传DICOM文件</button>
+                <button onclick="uploadDicom()">Upload DICOM File</button>
             </div>
             <div class="progress" id="uploadProgress">
                 <div class="progress-bar"></div>
@@ -117,9 +117,9 @@
         </div>
 
         <div class="test-section">
-            <h2>4. PACS查询测试</h2>
-            <input type="text" id="patientId" placeholder="患者ID">
-            <button onclick="searchPacs()">查询PACS</button>
+            <h2>4. PACS Query Test</h2>
+            <input type="text" id="patientId" placeholder="Patient ID">
+            <button onclick="searchPacs()">Query PACS</button>
             <div id="searchResponse" class="response"></div>
         </div>
     </div>
@@ -191,7 +191,7 @@
             try {
                 const response = await fetch(`/status/${currentTaskId}`);
                 if (!response.ok) {
-                    throw new Error(`获取状态失败: ${response.statusText}`);
+                    throw new Error(`Failed to get status: ${response.statusText}`);
                 }
 
                 const data = await response.json();
@@ -199,19 +199,19 @@
                 const progressDiv = document.getElementById('convertProgress');
                 const progressBar = progressDiv.querySelector('.progress-bar');
 
-                // 更新状态显示
-                let statusText = `状态: ${data.status}\n`;
-                statusText += `消息: ${data.message}\n`;
+                // Update status display
+                let statusText = `Status: ${data.status}\n`;
+                statusText += `Message: ${data.message}\n`;
                 
                 if (data.error) {
-                    statusText += `错误: ${data.error}\n`;
+                    statusText += `Error: ${data.error}\n`;
                 }
 
                 if (data.dicom_files && data.dicom_files.length > 0) {
-                    statusText += '\n转换后的文件:\n';
+                    statusText += '\nConverted files:\n';
                     responseDiv.innerHTML = statusText;  // 使用innerHTML来支持链接
                     
-                    // 为每个文件创建下载链接
+                    // Create download link for each file
                     data.dicom_files.forEach(file => {
                         const fileName = file.split('/').pop();
                         const downloadUrl = `/download/${currentTaskId}/${fileName}`;
@@ -222,7 +222,7 @@
                     responseDiv.textContent = statusText;
                 }
 
-                // 更新进度条
+                // Update progress bar
                 if (data.status === 'completed') {
                     progressBar.style.width = '100%';
                     clearInterval(statusCheckInterval);
@@ -230,7 +230,7 @@
                     progressDiv.style.display = 'none';
                     clearInterval(statusCheckInterval);
                 } else {
-                    progressBar.style.width = '50%';  // 处理中状态
+                    progressBar.style.width = '50%';  // Processing status
                 }
 
             } catch (error) {
