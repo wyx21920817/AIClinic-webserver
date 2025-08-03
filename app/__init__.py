@@ -34,8 +34,12 @@ def create_app():
             
             response.body_iterator = body_iterator()
             
-            # Log request and response info
-            await log_request_info(request, response.status_code, response_body.decode())
+            # Log request and response info - handle binary data
+            try:
+                decoded_body = response_body.decode('utf-8')
+            except UnicodeDecodeError:
+                # For binary data, just log the content length
+                decoded_body = f"<Binary data of length {len(response_body)} bytes>"
             
             # Log processing time
             logger.info(f"Request processed in {process_time:.2f} seconds")
