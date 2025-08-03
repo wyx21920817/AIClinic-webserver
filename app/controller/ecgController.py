@@ -465,16 +465,25 @@ async def upload_ecg_file(
         try:
             # Upload to Orthanc server
             orthanc_response = upload_dicom_file(temp_path, token=current_user.token)
-            if not orthanc_response:
-                # Get the error message from the response if available
-                error_msg = "Failed to upload DICOM file to Orthanc"
+            if "error" in orthanc_response:
                 raise HTTPException(
-                    status_code=500,
-                    detail=error_msg
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"文件上传失败: {orthanc_response['error']}"
+                )
+            
+            if not isinstance(orthanc_response, list) or len(orthanc_response) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"文件上传失败: 无效的上传结果"
                 )
             
             # Get DICOM UID from Orthanc response
-            dicom_uid = orthanc_response.get("ID", "")  # Instance ID returned by Orthanc
+            dicom_uid = orthanc_response[0].get("ID")
+            if not dicom_uid:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"文件上传失败: 无法获取实例 ID"
+                )
             
             # Process tags
             tag_list = []
@@ -628,7 +637,7 @@ async def get_patient_ecg_files(
             for ecg_file in ecg_files_db:
                 try:
                     instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
-                    if instance_details:
+                    if isinstance(instance_details, dict):
                         # Get instance creation time from DICOM tags
                         dicom_date = instance_details.get('MainDicomTags', {}).get('InstanceCreationDate')
                         dicom_time = instance_details.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
