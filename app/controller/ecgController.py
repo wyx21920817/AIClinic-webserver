@@ -271,6 +271,14 @@ async def update_ecg_file(
         # Log the update attempt
         logger.info(f"User {current_user.username} (role: {current_user.role}) attempting to update ECG file - user_id: {user_id}, instance_id: {instance_id}")
         
+        # Find the ECG file record
+        ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
+        if not ecg_file:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ECG file not found"
+            )
+
         # Convert tags string to list
         tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
         print(f"Processed tags: {tag_list}")  # Debug
@@ -307,9 +315,6 @@ async def update_ecg_file(
         if not hasattr(ecg_file, 'instanceIDs') or ecg_file.instanceIDs is None:
             ecg_file.instanceIDs = [ecg_file.dicom_uid]
             ecg_file.save()
-            
-        # Update file in database
-        ecg_file = await update_ecg_file_in_db(user_id, instance_id, notes, tag_list)
         
         # Log successful update
         logger.info(f"Successfully updated ECG file - user_id: {user_id}, instance_id: {instance_id}, tags: {tag_list}")
