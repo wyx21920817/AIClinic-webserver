@@ -495,10 +495,10 @@ async def upload_ecg_file(
                     detail="Patient does not have an Orthanc ID"
                 )
 
-            # Get current instances for this patient using patient_id
+            # Get current instances for this patient using MongoDB patient_id
             current_instances = []
             try:
-                existing_files = EcgFile.objects(patient_id=patient.patient_id).all()
+                existing_files = EcgFile.objects(patient_id=str(patient.id)).all()
                 for existing_file in existing_files:
                     if existing_file.instanceIDs:
                         current_instances.extend(existing_file.instanceIDs)
@@ -507,15 +507,15 @@ async def upload_ecg_file(
                 # Continue with empty list if there's an error
             current_instances.append(dicom_uid)
 
-            # Create or update ECG file record using Orthanc patient_id
+            # Create or update ECG file record using MongoDB patient_id
             ecg_file = EcgFile(
-                patient_id=str(patient.patient_id),  # Convert to string to avoid ObjectId validation
+                patient_id=str(patient.id),
+                filename=file.filename,
                 dicom_uid=dicom_uid,
-                uploaded_by=current_user.id,
+                instanceIDs=current_instances,
                 notes=notes,
                 tags=tag_list,
-                instanceIDs=current_instances,
-                filename=file.filename
+                uploaded_by=current_user.id
             )
             ecg_file.save()
 
@@ -622,9 +622,9 @@ async def get_patient_ecg_files(
                 detail="Patient does not have an Orthanc ID"
             )
 
-        # Get ECG files from database using Orthanc patient_id
+        # Get ECG files from database using MongoDB patient_id
         try:
-            ecg_files_db = EcgFile.objects(patient_id=str(patient.patient_id)).all()
+            ecg_files_db = EcgFile.objects(patient_id=str(patient.id)).all()
             ecg_files = []
             for ecg_file in ecg_files_db:
                 try:
