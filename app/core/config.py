@@ -10,9 +10,9 @@ load_dotenv()
 
 class Settings(BaseSettings):
     model_config = ConfigDict(
-        extra='allow',  # 允许额外的字段
-        env_file='.env',  # 指定环境变量文件
-        case_sensitive=True  # 大小写敏感
+        extra='allow',  # Allow extra fields
+        env_file='.env',  # Specify environment variable file
+        case_sensitive=True  # Case sensitive
     )
 
     # Server settings
@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     
     # JWT settings
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "60000"))  # JWT token 过期时间（分钟）
-    MFA_EXPIRE_MINUTES: int = int(os.getenv("MFA_EXPIRE_MINUTES", "50000"))   # MFA验证码过期时间（分钟）
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "60000"))  # JWT token expiration time (minutes)
+    MFA_EXPIRE_MINUTES: int = int(os.getenv("MFA_EXPIRE_MINUTES", "50000"))   # MFA verification code expiration time (minutes)
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
     

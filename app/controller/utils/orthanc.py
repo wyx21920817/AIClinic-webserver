@@ -20,13 +20,13 @@ ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 
 def get_headers(token):
     """
-    获取请求头，包含JWT token
+    Get request headers containing JWT token
     
     Args:
         token (str): JWT token
         
     Returns:
-        dict: 包含Authorization header的字典
+        dict: Dictionary containing Authorization header
     """
     if not token:
         raise ValueError("Token is required for Orthanc API calls")

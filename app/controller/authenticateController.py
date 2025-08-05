@@ -24,8 +24,8 @@ JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 @router.post('/verify-token')
 async def verify_token(authorization: str = Header(None)):
     """
-    验证JWT token的端点，供Orthanc回调使用
-    支持验证普通token和临时token
+    Endpoint for validating JWT tokens, used by Orthanc callbacks
+    Supports validation of regular tokens and temporary tokens
     """
     logger.info(f"Received token verification request")
     
@@ -91,7 +91,7 @@ async def verify_token(authorization: str = Header(None)):
         
         logger.info(f"Successful token verification for user {sub} with role {role}")
         
-        # 记录审计日志
+        # Record audit log
         AuditLog.log_auth(
             user_id=sub,
             action="verify_token",
@@ -138,7 +138,7 @@ async def get_temp_token():
         # Generate token
         token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
         
-        # 记录审计日志
+        # Record audit log
         AuditLog.log_auth(
             user_id="system",
             action="generate_temp_token",

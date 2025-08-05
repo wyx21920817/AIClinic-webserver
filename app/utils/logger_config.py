@@ -37,11 +37,11 @@ def setup_logger(name='AIClinic', log_file='server.log'):
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)
 
-    # 添加处理器
+    # Add handlers
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
-    # 添加一个专门用于请求日志的文件处理器
+    # Add a dedicated file handler for request logs
     requests_log = log_dir / 'requests.log'
     request_handler = RotatingFileHandler(
         requests_log,

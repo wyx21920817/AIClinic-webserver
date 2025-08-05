@@ -93,17 +93,17 @@ async def check_user_access(user_id: str, current_user: User):
 
 async def validate_ecg_file(file: UploadFile) -> bool:
     """
-    验证ECG文件的有效性
+    Validate ECG file
     
-    检查：
-    1. 文件大小
+    Checks:
+    1. File size
     """
-    # 读取文件内容
+    # Read file content
     contents = await file.read()
     if len(contents) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="文件内容为空"
+            detail="File content is empty"
         )
     
     # Check file size (e.g., max 50MB)
@@ -111,7 +111,7 @@ async def validate_ecg_file(file: UploadFile) -> bool:
     if len(contents) > max_size:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="文件大小超过限制（最大50MB）"
+            detail="File size exceeds limit (max 50MB)"
         )
     
     # Reset file pointer to start
@@ -451,7 +451,7 @@ async def upload_ecg_file(
         tags = form.get("tags", "")
         print(f"Additional fields - notes: {notes}, tags: {tags}")  # Debug
         
-        # 读取文件内容
+        # Read file content
         contents = await file.read()
         print(f"Read {len(contents)} bytes")  # Debug
         
@@ -466,7 +466,7 @@ async def upload_ecg_file(
             if "error" in orthanc_response:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"文件上传失败: {orthanc_response['error']}"
+                    detail=f"File upload failed: {orthanc_response['error']}"
                 )
             
             # Get DICOM UID from Orthanc response
@@ -474,7 +474,7 @@ async def upload_ecg_file(
             if not dicom_uid:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"文件上传失败: 无法获取实例 ID"
+                    detail=f"File upload failed: Unable to get instance ID"
                 )
             
             # Process tags
@@ -540,7 +540,7 @@ async def upload_ecg_file(
         print(f"Full error: {traceback.format_exc()}")  # Debug
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"文件上传失败: {str(e)}"
+            detail=f"File upload failed: {str(e)}"
         )
 
 @router.get("/{user_id}/diagnosis", response_model=List[DiagnosisResponse])

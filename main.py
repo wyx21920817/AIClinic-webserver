@@ -3,12 +3,12 @@ from app import create_app
 from app.core.config import settings
 import logging
 
-# 配置日志过滤器
+# Configure logging filter
 class StatusEndpointFilter(logging.Filter):
     def filter(self, record):
         return "GET /status/" not in record.getMessage()
 
-# 配置uvicorn的访问日志
+# Configure uvicorn access log
 logging.getLogger("uvicorn.access").addFilter(StatusEndpointFilter())
 
 app = create_app()
@@ -19,6 +19,6 @@ if __name__ == "__main__":
         host=settings.HOST,
         port=settings.PORT,
         reload=True,
-        workers=4,  # 增加工作进程数
+        workers=4,  # Increase number of worker processes
         log_level="info"
     )
