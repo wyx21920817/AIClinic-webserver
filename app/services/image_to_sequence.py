@@ -5,33 +5,33 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 import logging
 
-# 设置日志
+# Set up logging
 logger = logging.getLogger(__name__)
 
 def find_wave_height_range(img: np.ndarray) -> Tuple[int, int]:
     """
-    找到波形的高度范围
+    Find the height range of the waveform
     
     参数:
-        img: 灰度图像
+        img: Grayscale image
     
     返回:
-        起始和结束的y坐标
+        Start and end y coordinates
     """
-    # 计算每行的标准差，波形部分的标准差会比较大
+    # Calculate standard deviation for each row, waveform areas will have higher std
     row_std = np.std(img, axis=1)
     
-    # 使用自适应阈值找到波形区域
-    threshold = np.mean(row_std) * 0.3  # 降低阈值以包含更多区域
+    # Use adaptive threshold to find waveform region
+    threshold = np.mean(row_std) * 0.3  # Lower threshold to include more area
     wave_rows = row_std > threshold
     
-    # 找到第一个和最后一个超过阈值的位置
+    # Find first and last positions that exceed threshold
     wave_indices = np.where(wave_rows)[0]
     if len(wave_indices) == 0:
         return 0, img.shape[0]
         
-    start_y = max(0, wave_indices[0] - 10)  # 向上扩展一点
-    end_y = min(img.shape[0], wave_indices[-1] + 10)  # 向下扩展一点
+    start_y = max(0, wave_indices[0] - 10)  # Extend up a bit
+    end_y = min(img.shape[0], wave_indices[-1] + 10)  # Extend down a bit
     
     return start_y, end_y
 
@@ -41,51 +41,51 @@ def image_to_sequence(img: Union[str, np.ndarray],
                      window_len: int = 3,
                      plot_result: bool = False) -> np.ndarray:
     """
-    从图像中提取时间序列数据（ECG波形）。
+    Extract time series data (ECG waveform) from ECG image.
 
-    参数:
-        img: 输入图像路径或numpy数组
-        mode: 前景类型 - 'dark-foreground' 或 'bright-foreground'
-        method: 滤波方法 - 'max_finder', 'moving_average', 'hor_smoothing', 
+    Parameters:
+        img: Input image path or numpy array
+        mode: Foreground type - 'dark-foreground' or 'bright-foreground'
+        method: Filter method - 'max_finder', 'moving_average', 'hor_smoothing', 
                'all_left_right_neighbors', 'combined_all_neighbors'
-        window_len: 移动平均窗口长度
-        plot_result: 是否绘制结果
+        window_len: Moving average window length
+        plot_result: Whether to plot results
 
-    返回:
-        提取的序列数据（numpy数组）
+    Returns:
+        Extracted sequence data (numpy array)
     """
-    # 使用新的波形提取方法
+    # Use new waveform extraction method
     x_coords, waveform = extract_waveform_new(img, mode=mode, plot_result=plot_result)
     
-    # 如果新方法失败，使用原始方法
+    # If new method fails, use original method
     if len(waveform) == 0:
-        logger.warning("新方法未能检测到波形，使用原始方法")
+        logger.warning("New method failed to detect waveform, using original method")
         
-        # 加载图像
+        # Load image
         if isinstance(img, str):
             img = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
         elif len(img.shape) == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-        # 找到波形的高度范围
+        # Find waveform height range
         start_y, end_y = find_wave_height_range(img)
         img = img[start_y:end_y, :]
         
-        # 根据模式反转图像
+        # Invert image based on mode
         if mode == 'dark-foreground':
             img = 255 - img
         
         height, width = img.shape
         
-        # 标准化图像大小
+        # Standardize image size
         target_height = 1000
         target_width = 3000
         if height != target_height or width != target_width:
             img = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
             height, width = target_height, target_width
-            logger.info(f"调整图像大小到标准尺寸: {width}x{height}")
+            logger.info(f"Adjusting image size to standard dimensions: {width}x{height}")
         
-        # 根据不同方法处理图像
+        # Process image based on different methods
         if method == 'max_finder':
             img_filtered = img
         
@@ -104,17 +104,17 @@ def image_to_sequence(img: Union[str, np.ndarray],
             img_filtered = cv2.filter2D(img, -1, kernel)
         
         elif method == 'combined_all_neighbors':
-            # 水平方向
+            # Horizontal direction
             h1 = np.array([[1, 1, 1]]) / 3
             z1 = cv2.filter2D(img, -1, h1)
             
-            # 右下到左上
+            # Bottom right to top left
             h2 = np.array([[1, 0, 0],
                           [0, 1, 0],
                           [0, 0, 1]]) / 3
             z2 = cv2.filter2D(img, -1, h2)
             
-            # 左下到右上
+            # Bottom left to top right
             h3 = np.array([[0, 0, 1],
                           [0, 1, 0],
                           [1, 0, 0]]) / 3
@@ -122,19 +122,19 @@ def image_to_sequence(img: Union[str, np.ndarray],
             
             img_filtered = np.minimum(np.minimum(z1, z2), z3)
         
-        # 找每列的最大值点（波形位置）
+        # Find maximum point for each column (waveform position)
         waveform = np.argmax(img_filtered, axis=0)
-        logger.info(f"argmax后的数据: 类型={waveform.dtype}, 最小值={waveform.min()}, 最大值={waveform.max()}")
+        logger.info(f"Data after argmax: type={waveform.dtype}, min={waveform.min()}, max={waveform.max()}")
         
-        # 转换为波形振幅（反转Y轴）
+        # Convert to waveform amplitude (invert Y axis)
         waveform = height - waveform
-        logger.info(f"反转Y轴后的数据: 类型={waveform.dtype}, 最小值={waveform.min()}, 最大值={waveform.max()}")
+        logger.info(f"Data after Y axis inversion: type={waveform.dtype}, min={waveform.min()}, max={waveform.max()}")
         
-        # 缩放数据到合适的范围（-5到5）
+        # Scale data to appropriate range (-5 to 5)
         waveform = ((waveform - np.min(waveform)) / (np.max(waveform) - np.min(waveform)) * 10) - 5
-        logger.info(f"缩放后的数据: 类型={waveform.dtype}, 最小值={waveform.min():.3f}, 最大值={waveform.max():.3f}, 前20个点={waveform[:20]}")
+        logger.info(f"Data after scaling: type={waveform.dtype}, min={waveform.min():.3f}, max={waveform.max():.3f}, first 20 points={waveform[:20]}")
         
-        # 绘制结果
+        # Plot results
         if plot_result:
             plt.figure(figsize=(15, 5))
             plt.imshow(cv2.cvtColor(img, cv2.COLOR_GRAY2RGB))
@@ -152,19 +152,19 @@ def extract_lead_waveform(image: np.ndarray,
                          lead_id: int = None,
                          **kwargs) -> np.ndarray:
     """
-    从检测到的导联区域提取波形数据。
+    Extract waveform data from detected lead area.
 
     参数:
-        image: 原始图像
-        bbox: 边界框坐标 [x1, y1, x2, y2]
-        lead_id: 导联ID，用于位置验证
-            - 0-2: I, II, III (左侧)
-            - 3-5: aVR, aVL, aVF (中间)
-            - 6-11: V1-V6 (右侧)
-        **kwargs: 传递给image_to_sequence的参数
+        image: Original image
+        bbox: Bounding box coordinates [x1, y1, x2, y2]
+        lead_id: Lead ID for position verification
+            - 0-2: I, II, III (left side)
+            - 3-5: aVR, aVL, aVF (middle)
+            - 6-11: V1-V6 (right side)
+        **kwargs: Parameters passed to image_to_sequence
 
-    返回:
-        波形数据（numpy array）
+    Returns:
+        Waveform data (numpy array)
     """
     x1, y1, x2, y2 = bbox
     width = image.shape[1]

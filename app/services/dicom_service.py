@@ -81,10 +81,10 @@ class DicomService:
                         success_count += 1
             except Exception as e:
                 logger.error(f"Error sending to PACS: {str(e)}")
-                # 即使PACS发送失败，我们仍然返回已转换的文件
+                # Even if PACS send fails, we still return the converted files
                 
             logger.info(f"Sent {success_count} of {len(dicom_files)} files to PACS")
-            return dicom_files, len(dicom_files)  # 返回转换成功的文件数，而不是PACS发送成功的数量
+            return dicom_files, len(dicom_files)  # Return number of successfully converted files, not number of successful PACS sends
             
         except Exception as e:
             logger.error(f"Error in convert_and_send: {str(e)}")

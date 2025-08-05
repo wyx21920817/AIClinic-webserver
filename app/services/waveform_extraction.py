@@ -13,177 +13,177 @@ logger = logging.getLogger("AIClinic")
 def is_valid_lead_box(w, h, max_width_ratio=0.5, min_width_ratio=0.1, 
                      max_height_ratio=0.3, min_height_ratio=0.1):
     """
-    检查导联框是否合理
+    Check if lead box dimensions are reasonable
     
     参数:
-        w, h: 框的宽高（相对值，0-1之间）
-        max_width_ratio: 最大允许宽度比例
-        min_width_ratio: 最小允许宽度比例
-        max_height_ratio: 最大允许高度比例
-        min_height_ratio: 最小允许高度比例
+        w, h: Width and height of box (relative values between 0-1)
+        max_width_ratio: Maximum allowed width ratio
+        min_width_ratio: Minimum allowed width ratio
+        max_height_ratio: Maximum allowed height ratio
+        min_height_ratio: Minimum allowed height ratio
     """
-    logger.info(f"验证检测框: w={w:.3f}, h={h:.3f}")
-    logger.info(f"宽度范围: {min_width_ratio:.3f} - {max_width_ratio:.3f}")
-    logger.info(f"高度范围: {min_height_ratio:.3f} - {max_height_ratio:.3f}")
+    logger.info(f"Validating detection box: w={w:.3f}, h={h:.3f}")
+    logger.info(f"Width range: {min_width_ratio:.3f} - {max_width_ratio:.3f}")
+    logger.info(f"Height range: {min_height_ratio:.3f} - {max_height_ratio:.3f}")
     
     valid = (min_width_ratio <= w <= max_width_ratio and 
             min_height_ratio <= h <= max_height_ratio)
     
     if not valid:
         if not (min_width_ratio <= w <= max_width_ratio):
-            logger.warning(f"宽度 {w:.3f} 超出范围 [{min_width_ratio:.3f}, {max_width_ratio:.3f}]")
+            logger.warning(f"Width {w:.3f} out of range [{min_width_ratio:.3f}, {max_width_ratio:.3f}]")
         if not (min_height_ratio <= h <= max_height_ratio):
-            logger.warning(f"高度 {h:.3f} 超出范围 [{min_height_ratio:.3f}, {max_height_ratio:.3f}]")
+            logger.warning(f"Height {h:.3f} out of range [{min_height_ratio:.3f}, {max_height_ratio:.3f}]")
     
     return valid
 
 def get_region(y, height):
     """
-    确定区域
-    返回: 0 (top), 1 (middle), 2 (bottom)
+    Determine region
+    Returns: 0 (top), 1 (middle), 2 (bottom)
     """
-    if y < height * 0.2:  # 上20%
+    if y < height * 0.2:  # Top 20%
         return 0
-    elif y > height * 0.8:  # 下20%
+    elif y > height * 0.8:  # Bottom 20%
         return 2
-    else:  # 中间60%
+    else:  # Middle 60%
         return 1
 
 def filter_boxes(boxes, height):
     """
-    过滤检测框：
-    1. 去掉宽度过大或过小的框
-    2. 去掉高度过大或过小的框
-    3. 去掉重复的框（位置非常接近的框）
+    Filter detection boxes:
+    1. Remove boxes with too large or too small width
+    2. Remove boxes with too large or too small height
+    3. Remove duplicate boxes (boxes with very close positions)
     """
     if not boxes:
         return []
     
-    print(f"\n开始过滤，原始检测框数量：{len(boxes)}")
+    print(f"\nStarting filtering, original number of detection boxes: {len(boxes)}")
     
-    # 按x坐标排序
-    sorted_boxes = sorted(boxes, key=lambda x: x[1])  # x[1]是x_center
+    # Sort by x coordinate
+    sorted_boxes = sorted(boxes, key=lambda x: x[1])  # x[1] is x_center
     
-    # 去掉宽度和高度不合适的框
+    # Remove boxes with inappropriate width and height
     filtered = []
     for box in sorted_boxes:
-        if is_valid_lead_box(box[3], box[4]):  # 使用is_valid_lead_box检查宽高
+        if is_valid_lead_box(box[3], box[4]):  # Use is_valid_lead_box to check width and height
             filtered.append(box)
     
-    print(f"宽高过滤后剩余：{len(filtered)} 个框")
+    print(f"After width/height filtering: {len(filtered)} boxes remaining")
     
-    # 去掉重复的框（x和y坐标都非常接近的框）
+    # Remove duplicate boxes (boxes with very close x and y coordinates)
     no_duplicates = []
     for box in filtered:
-        # 检查是否和已保留的框重复
+        # Check if box duplicates any of the kept boxes
         is_duplicate = False
         for kept_box in no_duplicates:
             x_diff = abs(box[1] - kept_box[1])
             y_diff = abs(box[2] - kept_box[2])
-            if x_diff < 0.02 and y_diff < 0.02:  # 如果x和y的差距都小于0.02，认为是重复的框
+            if x_diff < 0.02 and y_diff < 0.02:  # If both x and y differences are less than 0.02, consider as duplicate
                 is_duplicate = True
                 break
         if not is_duplicate:
             no_duplicates.append(box)
     
-    print(f"去重后剩余：{len(no_duplicates)} 个框")
+    print(f"After removing duplicates: {len(no_duplicates)} boxes remaining")
     return no_duplicates
 
 def filter_boxes_by_x(boxes, min_x_diff=50):
     """
-    在x方向上过滤框：
-    1. 选择x最小的框作为第一个
-    2. 后面的框必须比前一个x大至少min_x_diff像素
+    Filter boxes in x direction:
+    1. Select box with smallest x as first
+    2. Following boxes must have x greater than previous by at least min_x_diff pixels
     """
     if len(boxes) <= 4:
         return boxes
     
-    # 按x坐标排序
-    sorted_boxes = sorted(boxes, key=lambda x: x[1])  # x[1]是x_center
+    # Sort by x coordinate
+    sorted_boxes = sorted(boxes, key=lambda x: x[1])  # x[1] is x_center
     
-    filtered = [sorted_boxes[0]]  # 保留x最小的框
+    filtered = [sorted_boxes[0]]  # Keep box with smallest x
     last_x = sorted_boxes[0][1]
     
-    # 遍历剩余的框
+    # Iterate through remaining boxes
     for box in sorted_boxes[1:]:
-        if box[1] - last_x >= min_x_diff/1000:  # 如果x差距足够大
+        if box[1] - last_x >= min_x_diff/1000:  # If x difference is large enough
             filtered.append(box)
             last_x = box[1]
-            if len(filtered) >= 4:  # 已经有4个框了，不需要更多
+            if len(filtered) >= 4:  # Already have 4 boxes, don't need more
                 break
     
     return filtered
 
 def cluster_boxes_by_y(boxes, min_gap=0.1):
     """
-    根据y坐标的相似度将框分组
+    Group boxes by similarity in y coordinates
     boxes: [(class_id, x_center, y_center, w, h), ...]
-    min_gap: 不同组之间的最小y差距
+    min_gap: Minimum y difference between different groups
     """
     if not boxes:
         return []
     
-    # 按y坐标排序
-    sorted_boxes = sorted(boxes, key=lambda x: x[2])  # x[2]是y_center
+    # Sort by y coordinate
+    sorted_boxes = sorted(boxes, key=lambda x: x[2])  # x[2] is y_center
     
-    # 计算相邻框之间的y差距
+    # Calculate y differences between adjacent boxes
     gaps = []
     for i in range(1, len(sorted_boxes)):
         gap = sorted_boxes[i][2] - sorted_boxes[i-1][2]
         gaps.append((i, gap))
     
-    # 按差距大小排序，找出最大的几个差距位置
+    # Sort by difference size, find positions with largest gaps
     gaps.sort(key=lambda x: x[1], reverse=True)
     
-    # 找出差距大于min_gap的分割点
+    # Find split points where gap is larger than min_gap
     split_points = []
     for idx, gap in gaps:
         if gap >= min_gap:
             split_points.append(idx)
-    split_points.sort()  # 按位置排序
+    split_points.sort()  # Sort by position
     
-    # 根据分割点分组
+    # Group by split points
     clusters = []
     start = 0
     for split in split_points:
         if split > start:
             clusters.append(sorted_boxes[start:split])
         start = split
-    # 添加最后一组
+    # Add last group
     if start < len(sorted_boxes):
         clusters.append(sorted_boxes[start:])
     
-    # 打印每个簇的y坐标
-    print("\n检测到的组：")
+    # Print y coordinates for each cluster
+    print("\nDetected groups:")
     for i, cluster in enumerate(clusters):
         y_mean = sum(box[2] for box in cluster) / len(cluster)
-        print(f"组 {i+1}: y≈{y_mean:.3f}, 框数量={len(cluster)}")
+        print(f"Group {i+1}: y≈{y_mean:.3f}, box count={len(cluster)}")
         for box in cluster:
             class_id, x, y, w, h = box
             print(f"  - ID={class_id}, x={x:.3f}, y={y:.3f}, w={w:.3f}, h={h:.3f}")
     
-    # 过滤掉框数量少于4个的组
+    # Filter out groups with fewer than 4 boxes
     filtered_clusters = [c for c in clusters if len(c) >= 4]
     if len(filtered_clusters) != len(clusters):
         removed = len(clusters) - len(filtered_clusters)
-        print(f"\n检测到 {len(clusters)} 组，移除了 {removed} 个框数量少于4的组")
+        print(f"\nDetected {len(clusters)} groups, removed {removed} groups with fewer than 4 boxes")
         return filtered_clusters
     
     return clusters
 
 def assign_leads(boxes, height):
     """
-    根据区域和位置分配导联
+    Assign leads based on region and position
     boxes: [(class_id, x_center, y_center, w, h), ...]
     """
-    logger.info("\n开始分配导联...")
+    logger.info("\nStarting lead assignment...")
     
-    # 根据y坐标聚类
+    # Cluster by y coordinates
     clusters = cluster_boxes_by_y(boxes)
     
-    # 如果没有得到至少3组，返回空
+    # If we don't have at least 3 groups, return empty
     if len(clusters) < 3:
-        logger.warning(f"警告：只检测到 {len(clusters)} 组框，需要至少3组")
+        logger.warning(f"Warning: Only detected {len(clusters)} groups of boxes, need at least 3")
         return {}
         
     # 按y坐标平均值排序，分配区域
@@ -206,7 +206,7 @@ def assign_leads(boxes, height):
         logger.info(f"需要分配的导联: {region_leads[region]}")
         logger.info(f"可用的框数量: {len(region_boxes)}")
         
-        # 按x坐标排序
+        # Sort by x coordinate
         region_boxes.sort(key=lambda x: x[1])
         logger.info("按x坐标排序后的框:")
         for box in region_boxes:
