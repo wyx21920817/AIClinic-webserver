@@ -223,7 +223,8 @@ async def get_ecg_file(
             notes=ecg_file.notes,
             tags=ecg_file.tags,
             dicom_uid=ecg_file.dicom_uid,
-            content=str(instance_details)
+            content=str(instance_details),
+            instanceIDs=ecg_file.instanceIDs
         )
     except Exception as e:
         print(f"Error getting file: {str(e)}")
