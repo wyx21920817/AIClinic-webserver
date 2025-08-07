@@ -18,21 +18,38 @@ if [ ! -z "$pid" ]; then
     kill -9 $pid
 fi
 
+# Detect OS and set virtual environment paths
+if [ -d "venv/Scripts" ]; then
+    # Windows paths
+    VENV_ACTIVATE="venv/Scripts/activate"
+    VENV_PYTHON="venv/Scripts/python"
+else
+    # Unix paths
+    VENV_ACTIVATE="venv/bin/activate"
+    VENV_PYTHON="venv/bin/python3"
+fi
+
 # Activate virtual environment
 if [ -d "venv" ]; then
     echo "Activating virtual environment..."
-    source venv/Scripts/activate
+    source $VENV_ACTIVATE
 else
     echo "Creating virtual environment..."
-    python -m venv venv
-    source venv/Scripts/activate
+    # Ensure python3-venv is installed on Ubuntu
+    if command -v apt-get &> /dev/null; then
+        echo "Installing python3-venv..."
+        sudo apt-get update && sudo apt-get install -y python3-venv python3-pip
+    fi
+    
+    python3 -m venv venv
+    source $VENV_ACTIVATE
     echo "Installing requirements..."
-    pip install -r requirements.txt
+    pip3 install --no-cache-dir -r requirements.txt
 fi
 
 # Start the server using venv python
 echo "Starting server..."
-venv/Scripts/python -m uvicorn main:app --host 0.0.0.0 --port 8000 &
+$VENV_PYTHON -m uvicorn main:app --host 0.0.0.0 --port 8000 &
 echo $! > .pid
 
 echo "Server started with PID: $(cat .pid)"
