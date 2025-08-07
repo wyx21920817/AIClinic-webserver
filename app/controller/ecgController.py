@@ -134,7 +134,7 @@ async def get_ecg_files(
     
     # Get files from database for this user
     ecg_files = EcgFile.objects(patient_id=user_id).all()
-    
+    responses = []
     for ecg_file in ecg_files:
         # Get instance details from Orthanc
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
