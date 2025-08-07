@@ -140,7 +140,7 @@ async def get_ecg_files(
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         if instance_details:
             responses.append(ECGFileResponse(
-                file_id=str(ecg_file.dicom_uid),  # Use DICOM UID as file ID
+                file_id=str(ecg_file._id),  # Use ID as file ID
                 user_id=user_id,
                 filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                 created_at=ecg_file.created_at,
