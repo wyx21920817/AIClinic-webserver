@@ -59,7 +59,7 @@ def upload_file(
             }
             try:
                 response = requests.get(
-                    'http://52.63.231.27:8001/api/auth/temp-token',
+                    'http://54.79.181.49:8001/api/auth/temp-token',
                     headers=headers,
                     verify=False,
                     timeout=5.0
