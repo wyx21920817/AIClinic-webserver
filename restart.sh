@@ -29,23 +29,23 @@ else
     VENV_PYTHON="venv/bin/python3"
 fi
 
-# Activate virtual environment
-if [ -d "venv" ]; then
-    echo "Activating virtual environment..."
-    source $VENV_ACTIVATE
-else
+# Create or activate virtual environment
+if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
     # Ensure python3-venv is installed on Ubuntu
     if command -v apt-get &> /dev/null; then
         echo "Installing python3-venv..."
         sudo apt-get update && sudo apt-get install -y python3-venv python3-pip
     fi
-    
     python3 -m venv venv
-    source $VENV_ACTIVATE
-    echo "Installing requirements..."
-    pip3 install --no-cache-dir -r requirements.txt
 fi
+
+echo "Activating virtual environment..."
+source $VENV_ACTIVATE
+
+# Always ensure requirements are installed
+echo "Installing/updating requirements..."
+pip3 install --no-cache-dir -r requirements.txt
 
 # Start the server using venv python
 echo "Starting server..."
