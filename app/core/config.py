@@ -3,17 +3,15 @@ from pathlib import Path
 from typing import ClassVar
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
 
 # Load environment variables
 load_dotenv()
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(
-        extra='allow',  # Allow extra fields
-        env_file='.env',  # Specify environment variable file
-        case_sensitive=True  # Case sensitive
-    )
+    class Config:
+        extra = 'allow'  # Allow extra fields
+        env_file = '.env'  # Specify environment variable file
+        case_sensitive = True  # Case sensitive
 
     # Server settings
     HOST: str = os.getenv("HOST", "0.0.0.0")
