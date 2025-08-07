@@ -43,9 +43,13 @@ fi
 echo "Activating virtual environment..."
 source $VENV_ACTIVATE
 
+# Upgrade pip first
+echo "Upgrading pip..."
+$VENV_PYTHON -m pip install --upgrade pip setuptools wheel
+
 # Always ensure requirements are installed
 echo "Installing/updating requirements..."
-$VENV_PYTHON -m pip install -r requirements.txt
+$VENV_PYTHON -m pip install -r requirements.txt --no-cache-dir
 
 # Start the server using venv python
 echo "Starting server..."
