@@ -140,7 +140,7 @@ async def get_ecg_files(
         instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
         if instance_details:
             responses.append(ECGFileResponse(
-                file_id=str(ecg_file.id),  # Use ID as file ID
+                file_id=str(ecg_file.dicom_uid),  # Use ID as file ID
                 user_id=user_id,
                 filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                 created_at=ecg_file.created_at,
@@ -173,18 +173,8 @@ async def get_ecg_file(
     await check_user_access(user_id, current_user)
     
     try:
-        # Convert file_id to ObjectId
-        try:
-            from bson import ObjectId
-            file_object_id = ObjectId(file_id)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid file_id format"
-            )
-            
-        # Get file from database
-        ecg_file = EcgFile.objects(id=file_object_id).first()
+        # Get file from database using dicom_uid
+        ecg_file = EcgFile.objects(dicom_uid=file_id).first()
         if not ecg_file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -226,7 +216,7 @@ async def get_ecg_file(
             )
         
         return ECGFileResponse(
-            file_id=str(ecg_file.id),
+            file_id=str(ecg_file.dicom_uid),
             user_id=user_id,
             filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
             created_at=ecg_file.created_at,
