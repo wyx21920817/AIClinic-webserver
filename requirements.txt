@@ -31,4 +31,3 @@ email-validator>=1.1.3  # Email validation for pydantic
 python-jose[cryptography]>=3.3.0  # JWT token handling
 passlib[bcrypt]>=1.7.4  # Password hashing
 pydantic==1.10.13
-pydantic-settings==2.0.3

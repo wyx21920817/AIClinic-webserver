@@ -32,12 +32,12 @@ fi
 # Create or activate virtual environment
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
-    # Ensure python3-venv is installed on Ubuntu
+    # Ensure python3.10-venv is installed on Ubuntu
     if command -v apt-get &> /dev/null; then
-        echo "Installing python3-venv..."
-        sudo apt-get update && sudo apt-get install -y python3-venv python3-pip
+        echo "Installing python3.10-venv..."
+        sudo apt-get update && sudo apt-get install -y python3.10-venv python3.10-pip
     fi
-    python3 -m venv venv
+    python3.10 -m venv venv
 fi
 
 echo "Activating virtual environment..."
@@ -45,7 +45,7 @@ source $VENV_ACTIVATE
 
 # Always ensure requirements are installed
 echo "Installing/updating requirements..."
-pip3 install --no-cache-dir -r requirements.txt
+pip3 install -r requirements.txt
 
 # Start the server using venv python
 echo "Starting server..."
