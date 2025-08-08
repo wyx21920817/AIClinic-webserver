@@ -24,7 +24,7 @@ router = APIRouter(
 class PatientCreate(BaseModel):
     patient_id: str
     name: str
-    gender: Gender
+    gender: str
     birth_date: datetime
     contact_info: dict = {}
 
@@ -38,7 +38,7 @@ class PatientResponse(BaseModel):
     id: str
     patient_id: str
     name: str
-    gender: Gender
+    gender: str
     birth_date: datetime
     contact_info: dict
     created_at: datetime
@@ -200,7 +200,7 @@ async def create_patient(
 async def update_patient(
     patient_id: str,
     name: Optional[str] = Form(None, description="Patient name"),
-    gender: Optional[Gender] = Form(None, description="Patient gender (M/F/Other)"),
+    gender: Optional[str] = Form(None, description="Patient gender"),
     birth_date: Optional[datetime] = Form(None, description="Patient birth date"),
     contact_info: Optional[dict] = Form(None, description="Patient contact information"),
     current_user: User = Depends(get_current_user)
