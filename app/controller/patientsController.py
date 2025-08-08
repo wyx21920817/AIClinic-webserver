@@ -11,6 +11,7 @@ ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 from ..model.user import User, UserRole
 from ..model.patient import Patient
 from ..model.doctor_patient import DoctorPatient
+from ..model.ecg_file import EcgFile
 from ..core.logging import AuditLog
 from .userController import get_current_user, get_admin_user
 from pydantic import BaseModel
@@ -323,6 +324,25 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
         raise HTTPException(status_code=404, detail="Patient not found")
 
     patient_name = patient.name
+    
+    # Delete associated ECG files
+    ecg_files = EcgFile.objects(patient_id=patient_id)
+    for ecg_file in ecg_files:
+        try:
+            # Delete from Orthanc PACS
+            if ecg_file.dicom_uid:
+                delete_instance(ecg_file.dicom_uid, current_user.token)
+            # Delete ECG record from database
+            ecg_file.delete()
+        except Exception as e:
+            logger.error(f"Error deleting ECG file {ecg_file.dicom_uid} for patient {patient_id}: {str(e)}")
+            # Continue with other deletions even if one fails
+            continue
+    
+    # Delete doctor-patient relationships
+    DoctorPatient.objects(patient=patient).delete()
+    
+    # Delete patient record
     patient.delete()
 
     AuditLog.log_data_access(
@@ -330,11 +350,11 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
         action="delete",
         resource_type="patient",
         resource_id=patient_id,
-        details=f"Delete patient: {patient_name}",
+        details=f"Delete patient: {patient_name} with {ecg_files.count()} ECG records",
         username=current_user.username
     )
 
-    return {"message": "Patient deleted successfully"}
+    return {"message": "Patient and associated records deleted successfully"}
 
 @router.get("/orthanc/patients/search",
     summary="Search patients in Orthanc",

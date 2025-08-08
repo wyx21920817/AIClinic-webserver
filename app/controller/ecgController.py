@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Body, Request
 from app.utils.logger_config import logger
 from fastapi.responses import JSONResponse, Response
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Dict
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 from ..model.user import User
 from ..model.ecg_file import EcgFile
@@ -24,6 +24,9 @@ from pathlib import Path
 import pydicom
 import tempfile
 from bson import ObjectId
+import requests
+import jwt
+from ..core.config import settings
 
 # Create ECG upload directory if it doesn't exist
 ECG_UPLOAD_DIR = Path("app/static/uploads/ecg")
@@ -72,11 +75,10 @@ class ECGFileUpdate(BaseModel):
     tags: List[str]
 
 class DiagnosisResponse(BaseModel):
-    diagnosis_id: str
-    file_id: str
-    user_id: str
-    diagnosis_result: dict
+    instance_id: str
+    diagnosis_result: Dict[str, any]
     created_at: datetime
+    status: str = 'completed'
 
 class UploadResponse(BaseModel):
     file_id: str
@@ -662,6 +664,97 @@ async def get_patient_ecg_files(
         )
 
 
+
+@router.post("/{user_id}/instances/{instance_id}/diagnose", response_model=DiagnosisResponse)
+async def diagnose_ecg(
+    user_id: str,
+    instance_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Send ECG instance to AI server for diagnosis.
+    
+    Args:
+        user_id: ID of the user who owns the ECG
+        instance_id: Orthanc instance ID of the DICOM ECG file
+        current_user: Current authenticated user
+        
+    Returns:
+        DiagnosisResponse containing the AI diagnosis results
+    """
+    # Verify user access
+    await check_user_access(user_id, current_user)
+    
+    # Log diagnosis request
+    AuditLog.log_data_access(
+        user_id=str(current_user.id),
+        action="diagnose",
+        resource_type="ecg_instance",
+        resource_id=instance_id,
+        details={"patient_id": user_id}
+    )
+    
+    try:
+        # Generate temporary token locally
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+        
+        # Generate JWT token with 5 minute expiry
+        payload = {
+            'exp': datetime.utcnow() + timedelta(minutes=5),
+            'iat': datetime.utcnow(),
+            'sub': str(current_user.id)
+        }
+        temp_token = jwt.encode(
+            payload,
+            settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM
+        )
+        logger.info("Successfully generated temporary token")
+        
+        # Send instance ID to AI server for diagnosis
+        try:
+            headers['Authorization'] = f'Bearer {temp_token}'
+            response = requests.post(
+                f"{settings.AI_SERVER_URL}/api/ecg/diagnose",
+                headers=headers,
+                json={
+                    'instance_id': instance_id
+                },
+                verify=False,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            diagnosis_result = response.json()
+            
+            return DiagnosisResponse(
+                instance_id=instance_id,
+                diagnosis_result=diagnosis_result,
+                created_at=datetime.now(),
+                status='completed'
+            )
+            
+        except requests.Timeout:
+            logger.error("Diagnosis request timed out")
+            raise HTTPException(status_code=504, detail="ECG诊断请求超时，请稍后重试")
+        except requests.HTTPError as e:
+            logger.error(f"Failed to get diagnosis. Status: {e.response.status_code}, Response: {e.response.text}")
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"ECG诊断失败: {e.response.text}"
+            )
+        except requests.RequestException as e:
+            logger.error(f"Network error during diagnosis: {str(e)}")
+            raise HTTPException(status_code=503, detail="无法连接到AI服务器，请检查网络连接")
+            
+    except Exception as e:
+        logger.error(f"Error during ECG diagnosis: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"ECG诊断失败: {str(e)}"
+        )
 
 @router.get("/{user_id}/instances/{instance_id}", response_model=ECGFileResponse)
 async def get_ecg_instances_file(
