@@ -405,15 +405,15 @@ async def delete_ecg_file(
         
         # Log the successful deletion
         audit_log = AuditLogEntry(
+            event_type="data_access",
             user_id=str(current_user.id),
             action="delete",
             resource_type="ecg_file",
             resource_id=instance_id,
-            details={
-                "patient_id": user_id,
-                "instance_id": instance_id
-            },
-            status="success"
+            details=f"Deleted ECG file {instance_id} for patient {user_id}",
+            status="success",
+            username=current_user.username,
+            request_info={"patient_id": user_id, "instance_id": instance_id}
         )
         audit_log.save()
         
@@ -525,12 +525,15 @@ async def upload_ecg_file(
             ecg_file.save()
 
             audit_log = AuditLogEntry(
+                event_type="data_access",
                 user_id=str(current_user.id),
                 action="upload_success",
                 resource_type="ecg_file",
                 resource_id=ecg_file.dicom_uid,
                 details=f"Upload success - Patient: {user_id}, File: {file.filename}, Tags: {ecg_file.tags}",
-                username=current_user.username
+                status="success",
+                username=current_user.username,
+                request_info={"patient_id": user_id, "filename": file.filename}
             )
             audit_log.save()
             
@@ -571,12 +574,16 @@ async def get_diagnosis(
     await check_user_access(user_id, current_user)
     
     # Log diagnosis API access
-    audit_log = AuditLog.log_api_call(
+    audit_log = AuditLogEntry(
+        event_type="data_access",
         user_id=str(current_user.id),
         action="get_diagnosis",
-        api_endpoint=f"/api/ecg/{user_id}/diagnosis",
+        resource_type="ecg_file",
+        resource_id=user_id,
         details=f"Get diagnosis for patient: {user_id}",
-        username=current_user.username
+        status="success",
+        username=current_user.username,
+        request_info={"patient_id": user_id}
     )
     audit_log.save()
     
@@ -709,11 +716,15 @@ async def diagnose_ecg(
     
     # Log diagnosis request
     audit_log = AuditLogEntry(
+        event_type="data_access",
         user_id=str(current_user.id),
         action="diagnose",
         resource_type="ecg_instance",
         resource_id=instance_id,
-        details={"patient_id": user_id}
+        details=f"Requested AI diagnosis for ECG instance {instance_id}, patient {user_id}",
+        status="success",
+        username=current_user.username,
+        request_info={"patient_id": user_id}
     )
     audit_log.save()
     
@@ -914,15 +925,15 @@ async def get_ecg_instances_file(
     
     # Log instance access
     audit_log = AuditLogEntry(
+        event_type="data_access",
         user_id=str(current_user.id),
         action="view",
         resource_type="ecg_instance",
         resource_id=instance_id,
-        details={
-            "patient_id": user_id,
-            "download": download
-        },
-        status="success"
+        details=f"Viewed ECG instance {instance_id} for patient {user_id}, download={download}",
+        status="success",
+        username=current_user.username,
+        request_info={"download": download}
     )
     audit_log.save()
     
