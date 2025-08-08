@@ -329,10 +329,7 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
     ecg_files = EcgFile.objects(patient_id=patient_id)
     for ecg_file in ecg_files:
         try:
-            # Delete from Orthanc PACS
-            if ecg_file.dicom_uid:
-                delete_instance(ecg_file.dicom_uid, current_user.token)
-            # Delete ECG record from database
+            # Delete ECG record from database only
             ecg_file.delete()
         except Exception as e:
             logger.error(f"Error deleting ECG file {ecg_file.dicom_uid} for patient {patient_id}: {str(e)}")
