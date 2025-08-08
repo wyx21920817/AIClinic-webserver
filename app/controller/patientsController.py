@@ -8,7 +8,7 @@ from app.core.config import settings
 
 ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 from ..model.user import User, UserRole
-from ..model.patient import Patient, Gender
+from ..model.patient import Patient
 from ..model.doctor_patient import DoctorPatient
 from ..core.logging import AuditLog
 from .userController import get_current_user, get_admin_user
@@ -30,7 +30,7 @@ class PatientCreate(BaseModel):
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
-    gender: Optional[Gender] = None
+    gender: Optional[str] = None
     birth_date: Optional[datetime] = None
     contact_info: Optional[dict] = None
 
@@ -143,7 +143,7 @@ async def get_patient(patient_id: str, current_user: User = Depends(get_current_
 async def create_patient(
     patient_id: str = Form(..., description="Unique patient ID"),
     name: str = Form(..., description="Patient name"),
-    gender: Gender = Form(..., description="Patient gender (M/F/Other)"),
+    gender: str = Form(..., description="Patient gender"),
     birth_date: datetime = Form(..., description="Patient birth date"),
     contact_info: dict = Form({}, description="Patient contact information"),
     current_user: User = Depends(get_current_user)
