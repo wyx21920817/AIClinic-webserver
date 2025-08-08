@@ -189,17 +189,27 @@ async def create_patient(
     try:
         # Check for existing ECG files in Orthanc
         from app.controller.utils.orthanc import get_patient_instances
+        logger.info(f"[Patient Creation] Checking Orthanc for ECG files for patient ID: {patient_id}")
+        
         instances = get_patient_instances(patient_id, current_user.token)
+        logger.info(f"[Patient Creation] Found {len(instances) if instances else 0} instances in Orthanc")
         
         if instances:
             from ..model.ecg_file import EcgFile
+            logger.info(f"[Patient Creation] Processing {len(instances)} instances from Orthanc")
+            
             # Create ECG file records for each instance
             for instance in instances:
                 instance_id = instance.get('ID')
+                logger.info(f"[Patient Creation] Processing instance ID: {instance_id}")
+                
                 if instance_id:
                     # Check if ECG file record already exists
                     existing_ecg = EcgFile.objects(dicom_uid=instance_id).first()
-                    if not existing_ecg:
+                    if existing_ecg:
+                        logger.info(f"[Patient Creation] ECG file record already exists for instance {instance_id}")
+                    else:
+                        logger.info(f"[Patient Creation] Creating new ECG file record for instance {instance_id}")
                         ecg_file = EcgFile(
                             patient_id=patient.id,
                             dicom_uid=instance_id,
@@ -207,6 +217,7 @@ async def create_patient(
                             instanceIDs=[instance_id]  # Store the instance ID
                         )
                         ecg_file.save()
+                        logger.info(f"[Patient Creation] Successfully created ECG file record with ID: {str(ecg_file.id)}")
                         
                         # Log ECG file creation
                         AuditLog.log_data_access(
@@ -217,8 +228,14 @@ async def create_patient(
                             details=f"Created ECG file record for patient: {patient.name}",
                             username=current_user.username
                         )
+                else:
+                    logger.warning(f"[Patient Creation] Instance missing ID: {instance}")
+        else:
+            logger.info(f"[Patient Creation] No ECG instances found in Orthanc for patient {patient_id}")
+            
     except Exception as e:
-        logger.error(f"Error handling ECG files for patient {patient_id}: {str(e)}")
+        logger.error(f"[Patient Creation] Error handling ECG files for patient {patient_id}: {str(e)}")
+        logger.error(f"[Patient Creation] Full error traceback:", exc_info=True)
         # Don't fail patient creation if ECG handling fails
         pass
 

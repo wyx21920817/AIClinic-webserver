@@ -421,9 +421,10 @@ def get_patient_instances(patient_id: str, token: str):
         list: List of instance details
     """
     try:
+        from app.utils.logger_config import logger
         headers = get_headers(token)
-        print(f"[Orthanc] Getting patient info for ID: {patient_id}")
-        print(f"[Orthanc] Using headers: {headers}")
+        logger.info(f"[Orthanc] Getting patient info for ID: {patient_id}")
+        logger.debug(f"[Orthanc] Using headers: {headers}")
         
         # Get patient information
         response = requests.get(
@@ -432,80 +433,80 @@ def get_patient_instances(patient_id: str, token: str):
             timeout=30
         )
         
-        print(f"[Orthanc] Patient response status: {response.status_code}")
-        print(f"[Orthanc] Patient response: {response.text}")
+        logger.info(f"[Orthanc] Patient response status: {response.status_code}")
+        logger.debug(f"[Orthanc] Patient response: {response.text}")
         
         if response.status_code == 200:
             patient_data = response.json()
             instances = []
             studies = patient_data.get('Studies', [])
-            print(f"[Orthanc] Found {len(studies)} studies for patient")
+            logger.info(f"[Orthanc] Found {len(studies)} studies for patient")
             
             # Get all studies
             for study_id in studies:
-                print(f"[Orthanc] Getting study {study_id}")
+                logger.info(f"[Orthanc] Getting study {study_id}")
                 study_response = requests.get(
                     f"{ORTHANC_SERVER_URL}/studies/{study_id}",
                     headers=headers,
                     timeout=30
                 )
-                print(f"[Orthanc] Study response status: {study_response.status_code}")
+                logger.info(f"[Orthanc] Study response status: {study_response.status_code}")
                 
                 if study_response.status_code == 200:
                     study_data = study_response.json()
                     series_list = study_data.get('Series', [])
-                    print(f"[Orthanc] Found {len(series_list)} series in study {study_id}")
+                    logger.info(f"[Orthanc] Found {len(series_list)} series in study {study_id}")
                     
                     # Get all series
                     for series_id in series_list:
-                        print(f"[Orthanc] Getting series {series_id}")
+                        logger.info(f"[Orthanc] Getting series {series_id}")
                         series_response = requests.get(
                             f"{ORTHANC_SERVER_URL}/series/{series_id}",
                             headers=headers,
                             timeout=30
                         )
-                        print(f"[Orthanc] Series response status: {series_response.status_code}")
+                        logger.info(f"[Orthanc] Series response status: {series_response.status_code}")
                         
                         if series_response.status_code == 200:
                             series_data = series_response.json()
                             instance_list = series_data.get('Instances', [])
-                            print(f"[Orthanc] Found {len(instance_list)} instances in series {series_id}")
+                            logger.info(f"[Orthanc] Found {len(instance_list)} instances in series {series_id}")
                             
                             # Get all instances
                             for instance_id in instance_list:
-                                print(f"[Orthanc] Getting instance {instance_id}")
+                                logger.info(f"[Orthanc] Getting instance {instance_id}")
                                 instance_response = requests.get(
                                     f"{ORTHANC_SERVER_URL}/instances/{instance_id}",
                                     headers=headers,
                                     timeout=30
                                 )
-                                print(f"[Orthanc] Instance response status: {instance_response.status_code}")
+                                logger.info(f"[Orthanc] Instance response status: {instance_response.status_code}")
                                 
                                 if instance_response.status_code == 200:
                                     instance_data = instance_response.json()
-                                    print(f"[Orthanc] Successfully got instance data: {instance_data.get('ID')}")
+                                    logger.info(f"[Orthanc] Successfully got instance data: {instance_data.get('ID')}")
                                     instances.append(instance_data)
                                 else:
-                                    print(f"[Orthanc] Error getting instance {instance_id}: {instance_response.status_code}")
-                                    print(f"[Orthanc] Error response: {instance_response.text}")
+                                    logger.error(f"[Orthanc] Error getting instance {instance_id}: {instance_response.status_code}")
+                                    logger.error(f"[Orthanc] Error response: {instance_response.text}")
                         else:
-                            print(f"[Orthanc] Error getting series {series_id}: {series_response.status_code}")
-                            print(f"[Orthanc] Error response: {series_response.text}")
+                            logger.error(f"[Orthanc] Error getting series {series_id}: {series_response.status_code}")
+                            logger.error(f"[Orthanc] Error response: {series_response.text}")
                 else:
-                    print(f"[Orthanc] Error getting study {study_id}: {study_response.status_code}")
-                    print(f"[Orthanc] Error response: {study_response.text}")
+                    logger.error(f"[Orthanc] Error getting study {study_id}: {study_response.status_code}")
+                    logger.error(f"[Orthanc] Error response: {study_response.text}")
             
-            print(f"[Orthanc] Total instances found: {len(instances)}")
+            logger.info(f"[Orthanc] Total instances found: {len(instances)}")
             return instances
         else:
-            print(f"[Orthanc] Error getting patient {patient_id}: {response.status_code}")
-            print(f"[Orthanc] Error response: {response.text}")
+            logger.error(f"[Orthanc] Error getting patient {patient_id}: {response.status_code}")
+            logger.error(f"[Orthanc] Error response: {response.text}")
             return []
             
     except Exception as e:
-        print(f"[Orthanc] Error getting patient instances: {str(e)}")
+        logger.error(f"[Orthanc] Error getting patient instances: {str(e)}")
         import traceback
-        print(f"[Orthanc] Full error: {traceback.format_exc()}")
+        logger.error(f"[Orthanc] Full error: {traceback.format_exc()}")
         return []
 
 def get_instance_tags(instance_id, token):
