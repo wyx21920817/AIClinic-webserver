@@ -40,7 +40,7 @@ class ECGFileResponse(BaseModel):
     user_id: str
     filename: str
     created_at: datetime
-    notes: str
+    notes: str = ''
     tags: List[str] = []
     dicom_uid: str
     content: str = ''
