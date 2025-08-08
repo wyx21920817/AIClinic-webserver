@@ -144,11 +144,11 @@ async def get_ecg_files(
                 user_id=user_id,
                 filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                 created_at=ecg_file.created_at,
-                notes=ecg_file.notes,
-                tags=ecg_file.tags,
+                notes=ecg_file.notes if ecg_file.notes is not None else '',
+                tags=ecg_file.tags if ecg_file.tags is not None else [],
                 dicom_uid=ecg_file.dicom_uid,
                 content=str(instance_details),  # Convert to string to ensure it can be serialized
-                instanceIDs=ecg_file.instanceIDs
+                instanceIDs=ecg_file.instanceIDs if ecg_file.instanceIDs is not None else []
             ))
     
     return responses
