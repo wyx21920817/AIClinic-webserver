@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 from app.controller.utils.orthanc import get_headers
 from app.core.config import settings
+from app.utils.logger_config import logger
 
 ORTHANC_SERVER_URL = settings.ORTHANC_SERVER_URL
 from ..model.user import User, UserRole
@@ -153,7 +154,7 @@ async def create_patient(
 
     - **patient_id**: Unique patient ID
     - **name**: Patient name
-    - **gender**: Patient gender (M/F/Other)
+    - **gender**: Patient gender
     - **birth_date**: Patient birth date
     - **contact_info**: Patient contact information (optional)
 
@@ -165,6 +166,7 @@ async def create_patient(
     if Patient.objects(patient_id=patient_id).first():
         raise HTTPException(status_code=400, detail="Patient ID already exists")
 
+    # Create the patient record
     patient = Patient(
         patient_id=patient_id,
         name=name,
@@ -174,6 +176,7 @@ async def create_patient(
     )
     patient.save()
 
+    # Log patient creation
     AuditLog.log_data_access(
         user_id=str(current_user.id),
         action="create",
@@ -182,6 +185,42 @@ async def create_patient(
         details=f"Create new patient: {patient.name}",
         username=current_user.username
     )
+
+    try:
+        # Check for existing ECG files in Orthanc
+        from app.controller.utils.orthanc import get_patient_instances
+        instances = get_patient_instances(patient_id, current_user.token)
+        
+        if instances:
+            from ..model.ecg_file import EcgFile
+            # Create ECG file records for each instance
+            for instance in instances:
+                instance_id = instance.get('ID')
+                if instance_id:
+                    # Check if ECG file record already exists
+                    existing_ecg = EcgFile.objects(dicom_uid=instance_id).first()
+                    if not existing_ecg:
+                        ecg_file = EcgFile(
+                            patient_id=patient.id,
+                            dicom_uid=instance_id,
+                            uploaded_by=current_user.id,
+                            instanceIDs=[instance_id]  # Store the instance ID
+                        )
+                        ecg_file.save()
+                        
+                        # Log ECG file creation
+                        AuditLog.log_data_access(
+                            user_id=str(current_user.id),
+                            action="create",
+                            resource_type="ecg_file",
+                            resource_id=str(ecg_file.id),
+                            details=f"Created ECG file record for patient: {patient.name}",
+                            username=current_user.username
+                        )
+    except Exception as e:
+        logger.error(f"Error handling ECG files for patient {patient_id}: {str(e)}")
+        # Don't fail patient creation if ECG handling fails
+        pass
 
     return PatientResponse(
         id=str(patient.id),
