@@ -404,7 +404,7 @@ async def delete_ecg_file(
             )
         
         # Log the successful deletion
-        AuditLogEntry(
+        audit_log = AuditLogEntry(
             user_id=str(current_user.id),
             action="delete",
             resource_type="ecg_file",
@@ -412,8 +412,10 @@ async def delete_ecg_file(
             details={
                 "patient_id": user_id,
                 "instance_id": instance_id
-            }
+            },
+            status="success"
         )
+        audit_log.save()
         
         return {"message": "File deleted successfully"}
         
@@ -446,14 +448,14 @@ async def upload_ecg_file(
         if "file" not in form:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="no file"
+                detail="No file provided"
             )
         
         file = form["file"]
         if not hasattr(file, "filename"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="no filename"
+                detail="No filename"
             )
         
         print(f"File info - filename: {file.filename}, content_type: {getattr(file, 'content_type', 'unknown')}")  # Debug
@@ -522,7 +524,7 @@ async def upload_ecg_file(
             )
             ecg_file.save()
 
-            AuditLogEntry(
+            audit_log = AuditLogEntry(
                 user_id=str(current_user.id),
                 action="upload_success",
                 resource_type="ecg_file",
@@ -530,6 +532,7 @@ async def upload_ecg_file(
                 details=f"Upload success - Patient: {user_id}, File: {file.filename}, Tags: {ecg_file.tags}",
                 username=current_user.username
             )
+            audit_log.save()
             
             return {
                 "file_id": str(ecg_file.id),
@@ -568,13 +571,14 @@ async def get_diagnosis(
     await check_user_access(user_id, current_user)
     
     # Log diagnosis API access
-    AuditLog.log_api_call(
+    audit_log = AuditLog.log_api_call(
         user_id=str(current_user.id),
         action="get_diagnosis",
         api_endpoint=f"/api/ecg/{user_id}/diagnosis",
         details=f"Get diagnosis for patient: {user_id}",
         username=current_user.username
     )
+    audit_log.save()
     
     # TODO: Implement database query to get AI diagnosis results
     # This is a mock response
@@ -704,13 +708,14 @@ async def diagnose_ecg(
     await check_user_access(user_id, current_user)
     
     # Log diagnosis request
-    AuditLogEntry(
+    audit_log = AuditLogEntry(
         user_id=str(current_user.id),
         action="diagnose",
         resource_type="ecg_instance",
         resource_id=instance_id,
         details={"patient_id": user_id}
     )
+    audit_log.save()
     
     try:
         # Generate temporary token locally
@@ -777,22 +782,22 @@ async def diagnose_ecg(
             
         except requests.Timeout:
             logger.error("Diagnosis request timed out")
-            raise HTTPException(status_code=504, detail="ECG诊断请求超时，请稍后重试")
+            raise HTTPException(status_code=504, detail="Diagnosis request timed out, please try again later")
         except requests.HTTPError as e:
             logger.error(f"Failed to get diagnosis. Status: {e.response.status_code}, Response: {e.response.text}")
             raise HTTPException(
                 status_code=e.response.status_code,
-                detail=f"ECG诊断失败: {e.response.text}"
+                detail=f"Failed to diagnose: {e.response.text}"
             )
         except requests.RequestException as e:
             logger.error(f"Network error during diagnosis: {str(e)}")
-            raise HTTPException(status_code=503, detail="无法连接到AI服务器，请检查网络连接")
+            raise HTTPException(status_code=503, detail="Unable to connect to AI server, please check network connection")
             
     except Exception as e:
         logger.error(f"Error during ECG diagnosis: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"ECG诊断失败: {str(e)}"
+            detail=f"Failed to diagnose: {str(e)}"
         )
 
 @router.post("/interpretation/{instance_id}", response_model=InterpretationResponse)
@@ -867,26 +872,26 @@ async def get_interpretation(
             logger.error("Interpretation request timed out")
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="获取解读结果超时，请稍后重试"
+                detail="Interpretation request timed out, please try again later"
             )
         except requests.HTTPError as e:
             logger.error(f"Failed to get interpretation. Status: {e.response.status_code}, Response: {e.response.text}")
             raise HTTPException(
                 status_code=e.response.status_code,
-                detail=f"获取解读结果失败: {e.response.text}"
+                detail=f"Failed to get interpretation: {e.response.text}"
             )
         except requests.RequestException as e:
             logger.error(f"Network error during interpretation request: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="无法连接到AI服务器，请检查网络连接"
+                detail="Unable to connect to AI server, please check network connection"
             )
             
     except Exception as e:
         logger.error(f"Error getting interpretation: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取解读结果失败: {str(e)}"
+            detail=f"Failed to get interpretation: {str(e)}"
         )
 
 @router.get("/{user_id}/instances/{instance_id}", response_model=ECGFileResponse)
@@ -908,7 +913,7 @@ async def get_ecg_instances_file(
     await check_user_access(user_id, current_user)
     
     # Log instance access
-    AuditLogEntry(
+    audit_log = AuditLogEntry(
         user_id=str(current_user.id),
         action="view",
         resource_type="ecg_instance",
@@ -916,8 +921,10 @@ async def get_ecg_instances_file(
         details={
             "patient_id": user_id,
             "download": download
-        }
+        },
+        status="success"
     )
+    audit_log.save()
     
     try:
         if download:
