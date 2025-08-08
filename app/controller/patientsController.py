@@ -326,7 +326,7 @@ async def delete_patient(patient_id: str, current_user: User = Depends(get_admin
     patient_name = patient.name
     
     # Delete associated ECG files
-    ecg_files = EcgFile.objects(patient_id=patient_id)
+    ecg_files = EcgFile.objects(patient_id=patient)
     for ecg_file in ecg_files:
         try:
             # Delete ECG record from database only
