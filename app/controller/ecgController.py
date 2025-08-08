@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse, Response
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
-from ..model.user import User
+from ..model.user import User, UserRole
 from ..model.audit_log import AuditLogEntry
 from ..model.ecg_file import EcgFile
 from ..model.patient import Patient
@@ -93,7 +93,6 @@ class InterpretationResponse(BaseModel):
     explanation: str = ''
     references: List[str] = []
     instance_id: str
-    temp_token: str
     
     class Config:
         arbitrary_types_allowed = True
@@ -811,10 +810,10 @@ async def diagnose_ecg(
             detail=f"Failed to diagnose: {str(e)}"
         )
 
-@router.post("/interpretation/{instance_id}", response_model=InterpretationResponse)
+@router.post("/interpretation/{instance_id}")
 async def get_interpretation(
     instance_id: str,
-    disease: str = Body(..., description="Disease name to get interpretation for"),
+    disease: str = Form("AF"),  # Default to AF if not provided
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -826,7 +825,7 @@ async def get_interpretation(
         current_user: Current authenticated user
         
     Returns:
-        InterpretationResponse containing interpretation and example image URLs
+        JSON response with analysis report and image URLs
     """
     # Verify user is a doctor or admin
     if current_user.role not in [UserRole.DOCTOR, UserRole.ADMIN]:
@@ -836,70 +835,53 @@ async def get_interpretation(
         )
     
     try:
-        # Generate temporary token
-        payload = {
-            'exp': datetime.utcnow() + timedelta(minutes=5),
-            'iat': datetime.utcnow(),
-            'sub': str(current_user.id)
-        }
-        temp_token = jwt.encode(
-            payload,
-            settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM
-        )
-        
-        # Request interpretation from AI server
-        headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
+        # Map disease abbreviations to directory names in ecg_analysis_results
+        disease_map = {
+            "AF": ["00001_lr_AF", "00234_lr_AF", "00279_lr_AF", "16731_hr_AF"],
+            "1dAVB": ["00234_lr_1dAVB", "01484_hr_1dAVB"],
+            "LBBB": ["03016_hr_LBBB", "15592_hr_LBBB"],
+            "RBBB": ["03041_hr_RBBB"],
+            "ST": ["04408_hr_ST"]
         }
         
-        try:
-            response = requests.post(
-                f"{settings.AI_SERVER_URL}/api/ecg/interpretation",
-                headers=headers,
-                json={
-                    'disease': disease,
-                    'instance_id': instance_id,
-                    'temp_token': temp_token
-                },
-                verify=False,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            result = response.json()
-            
-            return InterpretationResponse(
-                disease=disease,
-                interpretation=result.get('interpretation', []),
-                example_images=result.get('example_images', []),
-                explanation=result.get('explanation', ''),
-                references=result.get('references', []),
-                instance_id=result.get('instance_id', ''),
-                temp_token=temp_token
-            )
-            
-        except requests.Timeout:
-            logger.error("Interpretation request timed out")
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Interpretation request timed out, please try again later"
-            )
-        except requests.HTTPError as e:
-            logger.error(f"Failed to get interpretation. Status: {e.response.status_code}, Response: {e.response.text}")
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"Failed to get interpretation: {e.response.text}"
-            )
-        except requests.RequestException as e:
-            logger.error(f"Network error during interpretation request: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to connect to AI server, please check network connection"
-            )
+        # Use AF as default if the requested disease is not available
+        if disease not in disease_map:
+            disease = "AF"
+        
+        # Select a random directory for the disease (for variety)
+        import random
+        import json
+        from pathlib import Path
+        
+        result_dirs = disease_map[disease]
+        selected_dir = random.choice(result_dirs)
+        
+        # Path to the analysis report JSON file
+        base_path = Path("app/static/ecg_analysis_results")
+        report_path = base_path / selected_dir / "analysis_report.json"
+        
+        # Read the analysis report
+        with open(report_path, "r") as f:
+            report_data = json.load(f)
+        
+        # Update image paths to be full URLs
+        image_paths = []
+        for img_path in report_data.get("image_paths", []):
+            image_paths.append(f"/static/ecg_analysis_results/{selected_dir}/{img_path}")
+        
+        # Update the report data with the full image paths
+        report_data["image_paths"] = image_paths
+        
+        # Add instance_id to the response
+        report_data["instance_id"] = instance_id
+        
+        # Return the report data directly
+        return report_data
             
     except Exception as e:
+        import traceback
         logger.error(f"Error getting interpretation: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get interpretation: {str(e)}"

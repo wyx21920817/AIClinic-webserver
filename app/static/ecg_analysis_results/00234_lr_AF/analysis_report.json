@@ -1,0 +1,18 @@
+{
+    "title": "Atrial Fibrillation (00234_lr.dcm)",
+    "lead_name": "Lead II",
+    "report_text": "\nObservation for Atrial Fibrillation (00234_lr.dcm) (Lead II):\n- P-waves typically absent/fibrillatory.\n- Yellow boxes: Inferred P-wave regions.\n- RR histogram shows 'irregularly irregular' rhythm.",
+    "metrics": {
+        "rr_min_s": 0.7,
+        "rr_max_s": 0.76,
+        "rr_mean_s": 0.7316666666666668,
+        "rr_std_s": 0.017240134054647683,
+        "rr_interval_count": 12
+    },
+    "image_paths": [
+        "afib_ecg_with_rpeaks.png",
+        "afib_rr_histogram.png",
+        "afib_pwave_regions.png"
+    ],
+    "processing_time_seconds": 2.08
+}
