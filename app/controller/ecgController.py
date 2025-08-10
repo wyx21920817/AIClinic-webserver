@@ -263,7 +263,8 @@ async def update_ecg_file(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Update ECG file notes and tags.
+    Create a new ECG file record based on an existing one.
+    The original ECG file remains unchanged, and a new record is created.
     
     Args:
         user_id: ID of the user who owns the file
@@ -277,67 +278,98 @@ async def update_ecg_file(
     try:
         await check_user_access(user_id, current_user)
         
-        # Log the update attempt
-        logger.info(f"User {current_user.username} (role: {current_user.role}) attempting to update ECG file - user_id: {user_id}, instance_id: {instance_id}")
+        # Log the operation attempt
+        logger.info(f"User {current_user.username} (role: {current_user.role}) attempting to create new ECG file based on existing - user_id: {user_id}, instance_id: {instance_id}")
         
-        # Find the ECG file record
-        ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
-        if not ecg_file:
+        # Find the original ECG file record
+        original_ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
+        if not original_ecg_file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="ECG file not found"
+                detail="Original ECG file not found"
             )
 
         # Convert tags string to list
         tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
         print(f"Processed tags: {tag_list}")  # Debug
         
-        # Update Orthanc metadata
+        # Prepare metadata for the new instance
         metadata = {
             "Notes": notes,
             "Tags": ",".join(tag_list)
         }
-        print(f"Updating Orthanc metadata: {metadata}")  # Debug
+        print(f"Setting metadata for new instance: {metadata}")  # Debug
         
-        # Update Orthanc metadata and get current instances
-        result = modify_instance_metadata(ecg_file.dicom_uid, metadata, token=current_user.token)
-        if not result:
+        # Get instance details from Orthanc to create a new instance
+        instance_details = get_instance(instance_id, token=current_user.token)
+        if not instance_details:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Failed to retrieve instance details from server"
+            )
+        
+        # Create a new instance with modified metadata
+        result = modify_instance_metadata(instance_id, metadata, token=current_user.token)
+        if not result or 'instance_id' not in result:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update file metadata on server"
+                detail="Failed to create new instance with updated metadata"
             )
-        print("Successfully updated Orthanc metadata")  # Debug
         
-        # Update database with new metadata and instance list
-        ecg_file.notes = notes
-        ecg_file.tags = tag_list
-        ecg_file.instanceIDs = result['current_instances']  # Update instanceIDs with current list
-        ecg_file.dicom_uid = result['instance_id']  # Update to new instance ID
-        ecg_file.save()
-        print("Successfully updated database record")  # Debug
+        new_instance_id = result['instance_id']
+        print(f"Created new instance with ID: {new_instance_id}")  # Debug
         
-        # Get updated instance details
-        instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
-        print(f"Retrieved instance details from Orthanc: {instance_details}")  # Debug
+        # Get patient record
+        patient = Patient.objects(id=user_id).first()
+        if not patient:
+            raise HTTPException(
+                status_code=404,
+                detail="Patient not found"
+            )
         
-        # Ensure instanceIDs field exists
-        if not hasattr(ecg_file, 'instanceIDs') or ecg_file.instanceIDs is None:
-            ecg_file.instanceIDs = [ecg_file.dicom_uid]
-            ecg_file.save()
-        
-        # Log successful update
-        logger.info(f"Successfully updated ECG file - user_id: {user_id}, instance_id: {instance_id}, tags: {tag_list}")
-        
-        return ECGFileResponse(
-            id=str(ecg_file.id),
-            user_id=user_id,
-            filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
-            created_at=ecg_file.created_at,
+        # Create a new ECG file record
+        new_ecg_file = EcgFile(
+            patient_id=str(patient.id),
+            dicom_uid=new_instance_id,
+            instanceIDs=[new_instance_id],  # Start with just the new instance
             notes=notes,
             tags=tag_list,
-            dicom_uid=ecg_file.dicom_uid,
-            content=str(instance_details),  # Adding content field to match model
-            instanceIDs=ecg_file.instanceIDs
+            uploaded_by=current_user.id
+        )
+        new_ecg_file.save()
+        print(f"Created new ECG file record with ID: {str(new_ecg_file.id)}")  # Debug
+        
+        # Get updated instance details
+        new_instance_details = get_instance(new_instance_id, token=current_user.token)
+        print(f"Retrieved new instance details from Orthanc: {new_instance_details}")  # Debug
+        
+        # Log successful operation
+        logger.info(f"Successfully created new ECG file - user_id: {user_id}, original_instance_id: {instance_id}, new_instance_id: {new_instance_id}, tags: {tag_list}")
+        
+        # Create audit log entry
+        audit_log = AuditLogEntry(
+            event_type="data_access",
+            user_id=str(current_user.id),
+            action="create_new_version",
+            resource_type="ecg_file",
+            resource_id=new_instance_id,
+            details=f"Created new ECG file version - Patient: {user_id}, Original instance: {instance_id}, New instance: {new_instance_id}",
+            status="success",
+            username=current_user.username,
+            request_info={"patient_id": user_id, "original_instance_id": instance_id, "new_instance_id": new_instance_id}
+        )
+        audit_log.save()
+        
+        return ECGFileResponse(
+            id=str(new_ecg_file.id),
+            user_id=user_id,
+            filename=new_instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+            created_at=new_ecg_file.created_at,
+            notes=notes,
+            tags=tag_list,
+            dicom_uid=new_instance_id,
+            content=str(new_instance_details),  # Adding content field to match model
+            instanceIDs=[new_instance_id]
         )
     except Exception as e:
         print(f"Error in update_ecg_file: {str(e)}")  # Debug
@@ -345,7 +377,7 @@ async def update_ecg_file(
         print(f"Full error traceback: {traceback.format_exc()}")  # Debug
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update ECG file: {str(e)}"
+            detail=f"Failed to create new ECG file: {str(e)}"
         )
 
 @router.delete("/{user_id}/files/{instance_id}")
@@ -760,22 +792,70 @@ async def diagnose_ecg(
                 timeout=30.0
             )
             response.raise_for_status()
-            diagnosis_result = response.json()
+            ai_response = response.json()
             
-            # Update ECGFile with diagnosis result
+            # Extract data from AI response
+            modified_instance_id = ai_response.get('modified_instance_id')
+            predictions = ai_response.get('predictions', {})
+            
+            logger.info(f"Received AI diagnosis response with modified_instance_id: {modified_instance_id}")
+            
+            # Find the original ECG file record
             try:
-                ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
-                if not ecg_file:
+                original_ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
+                if not original_ecg_file:
                     logger.error(f"ECG file not found for instance_id: {instance_id}")
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="ECG file not found"
                     )
                 
-                ecg_file.diagnosis_result = diagnosis_result
-                ecg_file.save()
+                # Create a new ECG file record with the modified instance ID
+                if modified_instance_id:
+                    # Create a new ECG file record
+                    new_ecg_file = EcgFile(
+                        patient_id=original_ecg_file.patient_id,
+                        dicom_uid=modified_instance_id,
+                        instanceIDs=[modified_instance_id],
+                        notes=original_ecg_file.notes,
+                        tags=original_ecg_file.tags,
+                        uploaded_by=current_user.id,
+                        diagnosis_result=predictions  # Store predictions as diagnosis result
+                    )
+                    new_ecg_file.save()
+                    
+                    logger.info(f"Created new ECG file record with modified_instance_id: {modified_instance_id}")
+                    
+                    # Create audit log entry for the new record
+                    audit_log = AuditLogEntry(
+                        event_type="data_access",
+                        user_id=str(current_user.id),
+                        action="create_diagnosis_version",
+                        resource_type="ecg_file",
+                        resource_id=modified_instance_id,
+                        details=f"Created new ECG file with diagnosis - Patient: {user_id}, Original instance: {instance_id}, New instance: {modified_instance_id}",
+                        status="success",
+                        username=current_user.username,
+                        request_info={"patient_id": user_id, "original_instance_id": instance_id, "new_instance_id": modified_instance_id}
+                    )
+                    audit_log.save()
+                    
+                    # Use the new ECG file for the response
+                    ecg_file = new_ecg_file
+                else:
+                    # If no modified_instance_id is provided, update the original record
+                    original_ecg_file.diagnosis_result = predictions
+                    original_ecg_file.save()
+                    ecg_file = original_ecg_file
+                    
+                    logger.info(f"Updated original ECG file {instance_id} with diagnosis result")
                 
-                logger.info(f"Successfully updated ECG file {instance_id} with diagnosis result")
+                # Return the diagnosis result from the appropriate ECG file
+                diagnosis_result = {
+                    "instance_id": ecg_file.dicom_uid,
+                    "diagnosis_result": ecg_file.diagnosis_result,
+                    "status": "success"
+                }
             except Exception as e:
                 logger.error(f"Failed to update ECG file with diagnosis result: {str(e)}")
                 raise HTTPException(
