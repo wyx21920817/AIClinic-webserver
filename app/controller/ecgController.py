@@ -76,9 +76,10 @@ class ECGFileUpdate(BaseModel):
     tags: List[str]
 
 class DiagnosisResult(BaseModel):
-    diagnosis: str
-    confidence: float
-    findings: List[Dict[str, Union[str, float]]]
+    original_dnn_model: Optional[Dict[str, float]] = None
+    resnet_fine_tuned_model: Optional[Dict[str, float]] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
 
 class DiagnosisResponse(BaseModel):
     instance_id: str
@@ -782,7 +783,7 @@ async def diagnose_ecg(
         # Send instance ID and token to AI server for diagnosis
         try:
             response = requests.post(
-                f"{settings.AI_SERVER_URL}/api/ecg/diagnose",
+                f"{settings.aiserver_uri}/diagnose/{instance_id}",
                 headers=headers,
                 json={
                     'instance_id': instance_id,
@@ -851,11 +852,13 @@ async def diagnose_ecg(
                     logger.info(f"Updated original ECG file {instance_id} with diagnosis result")
                 
                 # Return the diagnosis result from the appropriate ECG file
-                diagnosis_result = {
-                    "instance_id": ecg_file.dicom_uid,
-                    "diagnosis_result": ecg_file.diagnosis_result,
-                    "status": "success"
-                }
+                # Use the AI server's predictions directly
+                diagnosis_result = DiagnosisResult(
+                    original_dnn_model=ecg_file.diagnosis_result.get('original_dnn_model'),
+                    resnet_fine_tuned_model=ecg_file.diagnosis_result.get('resnet_fine_tuned_model'),
+                    status="success",
+                    message=f"Successfully diagnosed ECG instance: {instance_id}"
+                )
             except Exception as e:
                 logger.error(f"Failed to update ECG file with diagnosis result: {str(e)}")
                 raise HTTPException(
@@ -864,7 +867,7 @@ async def diagnose_ecg(
                 )
             
             return DiagnosisResponse(
-                instance_id=instance_id,
+                instance_id=modified_instance_id,
                 diagnosis_result=diagnosis_result,
                 created_at=datetime.now(),
                 status='completed'
