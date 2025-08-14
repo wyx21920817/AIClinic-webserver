@@ -896,10 +896,12 @@ async def diagnose_ecg(
             detail=f"Failed to diagnose: {str(e)}"
         )
 
+from fastapi import Form
+
 @router.post("/interpretation/{instance_id}")
 async def get_interpretation(
     instance_id: str,
-    request: Request,
+    disease: List[str] = Form(...),  # 使用List[str]接收多个同名字段，...表示必需参数
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -932,10 +934,6 @@ async def get_interpretation(
         )
     
     try:
-        # Get form data
-        form_data = await request.form()
-        logger.info(f"Form data received: {dict(form_data)}")
-        
         # Map disease abbreviations to directory names in ecg_analysis_results
         disease_map = {
             "AF": ["00001_lr_AF", "00234_lr_AF", "00279_lr_AF", "16731_hr_AF"],
@@ -952,19 +950,17 @@ async def get_interpretation(
         # Initialize list to store results for each disease
         results = []
         
-        # Extract disease values from form data
-        # When multiple form fields have the same name, we need to handle them specially
-        # First, check if the form data contains multiple disease values
-        disease_values = []
-        for key, value in form_data.items():
-            if key == 'disease':
-                disease_values.append(value)
-        
-        # If no diseases were found, use the default
-        if not disease_values:
-            disease_values = ['AF']
-        
+        # Use the disease values from the Form parameter
+        # If none were provided, return an error
+        if not disease:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No disease parameter provided"
+            )
+        disease_values = disease
+            
         logger.info(f"Processing diseases: {disease_values}")
+
         
         # Process each disease
         for disease_name in disease_values:
