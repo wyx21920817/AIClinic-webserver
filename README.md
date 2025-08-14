@@ -28,7 +28,41 @@ A web-based DICOM viewer application built with React and Python Flask that allo
 pip install -r requirements.txt
 ```
 
-2. Start the Flask server:
+2. Set up your environment variables by creating a `.env` file in the root directory with the following variables:
+```
+# Server settings
+HOST=0.0.0.0
+PORT=8000
+
+# Directory settings
+UPLOAD_DIR=./uploads
+DICOM_DIR=./dicom_files
+
+# AI Server settings
+AISERVER_URI=http://localhost:9000
+
+# MongoDB configuration
+MONGODB_URI=mongodb://localhost:27017/aiclinic
+
+# JWT settings
+JWT_SECRET_KEY=your-secret-key-change-this
+JWT_EXPIRE_MINUTES=60000
+MFA_EXPIRE_MINUTES=50000
+
+# SMTP settings
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@example.com
+SMTP_PASSWORD=your-email-password
+
+# Orthanc settings
+ORTHANC_SERVER_URL=http://127.0.0.1:8042
+
+# Logging settings
+LOG_LEVEL=INFO
+```
+
+3. Start the Flask server:
 ```bash
 python run.py
 ```
@@ -117,3 +151,45 @@ The project follows modern software development practices:
 - Comprehensive logging
 - Error handling
 - Standard ECG processing protocols
+
+## Docker Deployment
+
+### Building the Docker Image
+
+```bash
+docker build -t aiclinic-webserver .
+```
+
+### Running the Docker Container
+
+```bash
+docker run -d -p 8000:8000 --name aiclinic-server \
+  --env-file .env \
+  aiclinic-webserver
+```
+
+Alternatively, you can specify environment variables directly in the command:
+
+```bash
+docker run -d -p 8000:8000 --name aiclinic-server \
+  -e MONGODB_URI=mongodb://host.docker.internal:27017/aiclinic \
+  -e ORTHANC_SERVER_URL=http://host.docker.internal:8042 \
+  -e JWT_SECRET_KEY=your-secret-key \
+  aiclinic-webserver
+```
+
+Note: When using Docker, you may need to use `host.docker.internal` instead of `localhost` to connect to services running on the host machine.
+
+The application will be available at http://localhost:8000
+
+### Stopping the Docker Container
+
+```bash
+docker stop aiclinic-server
+```
+
+### Removing the Docker Container
+
+```bash
+docker rm aiclinic-server
+```

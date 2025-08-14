@@ -1,5 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Body, Request
+from fastapi.param_functions import Form
+from fastapi import Query
 from app.utils.logger_config import logger
+from app.core.config import settings
 from fastapi.responses import JSONResponse, Response
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
@@ -896,19 +899,30 @@ async def diagnose_ecg(
 @router.post("/interpretation/{instance_id}")
 async def get_interpretation(
     instance_id: str,
-    disease: str = Form("AF"),  # Default to AF if not provided
+    request: Request,
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get ECG interpretation and example images for a specific disease.
+    Get ECG interpretation and example images for multiple diseases.
     
     Args:
         instance_id: The Orthanc instance ID of the ECG file
-        disease: Name of the disease to get interpretation for
+        request: The request object containing form data with disease values
         current_user: Current authenticated user
-        
+    
+    Form Data:
+        disease: One or more disease values to get interpretations for. 
+                To request multiple diseases, include multiple 'disease' fields in the form data.
+                Available options: AF, 1dAVB, LBBB, RBBB, ST
+                Default: AF
+    
     Returns:
-        JSON response with analysis report and image URLs
+        List of JSON responses with analysis reports and image URLs for each disease.
+        Each response contains:
+        - analysis_report: Diagnostic criteria and interpretation
+        - image_paths: URLs to example ECG images
+        - instance_id: The original instance ID
+        - disease: The disease name for this interpretation
     """
     # Verify user is a doctor or admin
     if current_user.role not in [UserRole.DOCTOR, UserRole.ADMIN]:
@@ -918,6 +932,10 @@ async def get_interpretation(
         )
     
     try:
+        # Get form data
+        form_data = await request.form()
+        logger.info(f"Form data received: {dict(form_data)}")
+        
         # Map disease abbreviations to directory names in ecg_analysis_results
         disease_map = {
             "AF": ["00001_lr_AF", "00234_lr_AF", "00279_lr_AF", "16731_hr_AF"],
@@ -927,39 +945,63 @@ async def get_interpretation(
             "ST": ["04408_hr_ST"]
         }
         
-        # Use AF as default if the requested disease is not available
-        if disease not in disease_map:
-            disease = "AF"
-        
-        # Select a random directory for the disease (for variety)
         import random
         import json
         from pathlib import Path
         
-        result_dirs = disease_map[disease]
-        selected_dir = random.choice(result_dirs)
+        # Initialize list to store results for each disease
+        results = []
         
-        # Path to the analysis report JSON file
-        base_path = Path("app/static/ecg_analysis_results")
-        report_path = base_path / selected_dir / "analysis_report.json"
+        # Extract disease values from form data
+        # When multiple form fields have the same name, we need to handle them specially
+        # First, check if the form data contains multiple disease values
+        disease_values = []
+        for key, value in form_data.items():
+            if key == 'disease':
+                disease_values.append(value)
         
-        # Read the analysis report
-        with open(report_path, "r") as f:
-            report_data = json.load(f)
+        # If no diseases were found, use the default
+        if not disease_values:
+            disease_values = ['AF']
         
-        # Update image paths to be full URLs
-        image_paths = []
-        for img_path in report_data.get("image_paths", []):
-            image_paths.append(f"/static/ecg_analysis_results/{selected_dir}/{img_path}")
+        logger.info(f"Processing diseases: {disease_values}")
         
-        # Update the report data with the full image paths
-        report_data["image_paths"] = image_paths
+        # Process each disease
+        for disease_name in disease_values:
+            print('disease_name:',disease_name)
+            # Use AF as default if the requested disease is not available
+            if disease_name not in disease_map:
+                disease_name = "AF"
+            
+            # Select a random directory for the disease (for variety)
+            result_dirs = disease_map[disease_name]
+            selected_dir = random.choice(result_dirs)
+            
+            # Path to the analysis report JSON file
+            base_path = Path("app/static/ecg_analysis_results")
+            report_path = base_path / selected_dir / "analysis_report.json"
+            
+            # Read the analysis report
+            with open(report_path, "r") as f:
+                report_data = json.load(f)
+            
+            # Update image paths to be full URLs with WEBSERVER_URI
+            image_paths = []
+            for img_path in report_data.get("image_paths", []):
+                image_paths.append(f"{settings.WEBSERVER_URI}/static/ecg_analysis_results/{selected_dir}/{img_path}")
+            
+            # Update the report data with the full image paths
+            report_data["image_paths"] = image_paths
+            
+            # Add instance_id and disease name to the response
+            report_data["instance_id"] = instance_id
+            report_data["disease"] = disease_name
+            
+            # Add this disease's report to the results list
+            results.append(report_data)
         
-        # Add instance_id to the response
-        report_data["instance_id"] = instance_id
-        
-        # Return the report data directly
-        return report_data
+        # Return the list of report data
+        return results
             
     except Exception as e:
         import traceback

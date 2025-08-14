@@ -44,6 +44,9 @@ class Settings(BaseSettings):
 
     # Orthanc settings
     ORTHANC_SERVER_URL: str = os.getenv('ORTHANC_SERVER_URL', 'http://127.0.0.1:8042')
+    
+    # Web server settings
+    WEBSERVER_URI: str = os.getenv('WEBSERVER_URI', 'http://localhost:8000')
 
     # Logging settings
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
