@@ -909,7 +909,7 @@ async def get_interpretation(
     
     Args:
         instance_id: The Orthanc instance ID of the ECG file
-        request: The request object containing form data with disease values
+        disease: List of diseases to get interpretations for
         current_user: Current authenticated user
     
     Form Data:
@@ -919,85 +919,113 @@ async def get_interpretation(
                 Default: AF
     
     Returns:
-        List of JSON responses with analysis reports and image URLs for each disease.
-        Each response contains:
-        - analysis_report: Diagnostic criteria and interpretation
-        - image_paths: URLs to example ECG images
-        - instance_id: The original instance ID
-        - disease: The disease name for this interpretation
+        JSON response with analysis reports and image URLs for each disease.
+        Response format:
+        {
+            "instance_id": "3725559d-2c4dd6c0-a3d79d14-e9d8f0ed-84bdb597",
+            "abnormalities": ["LBBB", "AF", "ST"],
+            "status": "success",
+            "results": [
+                {
+                    "status": "ok",
+                    "abnormality": "LBBB",
+                    "record_identifier": "3725559d-2c4dd6c0-a3d79d14-e9d8f0ed-84bdb597",
+                    "task_output_dir": "...",
+                    "report_path": "...",
+                    "report": { ... }
+                },
+                ...
+            ],
+            "message": "XAI interpretation completed."
+        }
     """
-    # Verify user is a doctor or admin
-    if current_user.role not in [UserRole.DOCTOR, UserRole.ADMIN]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only doctors and admins can access diagnostic criteria"
-        )
+    # Log interpretation request
+    audit_log = AuditLogEntry(
+        event_type="data_access",
+        user_id=str(current_user.id),
+        action="interpretation",
+        resource_type="ecg_instance",
+        resource_id=instance_id,
+        details=f"Requested interpretation for ECG instance {instance_id}",
+        status="success",
+        username=current_user.username,
+        request_info={"diseases": disease}
+    )
+    audit_log.save()
     
     try:
-        # Map disease abbreviations to directory names in ecg_analysis_results
-        disease_map = {
-            "AF": ["00001_lr_AF", "00234_lr_AF", "00279_lr_AF", "16731_hr_AF"],
-            "1dAVB": ["00234_lr_1dAVB", "01484_hr_1dAVB"],
-            "LBBB": ["03016_hr_LBBB", "15592_hr_LBBB"],
-            "RBBB": ["03041_hr_RBBB"],
-            "ST": ["04408_hr_ST"]
+        # Prepare the request to the AI server
+        ai_server_url = f"{settings.AISERVER_URI}/interprete/{instance_id}"
+        
+        # Generate JWT token with 5 minute expiry
+        payload = {
+            'exp': datetime.utcnow() + timedelta(minutes=5),
+            'iat': datetime.utcnow(),
+            'sub': str(current_user.id)
         }
+        temp_token = jwt.encode(
+            payload,
+            settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM
+        )
+        logger.info("Successfully generated temporary token for interpretation request")
         
-        import random
-        import json
-        from pathlib import Path
+        # Prepare the form data
+        form_data = {}
         
-        # Initialize list to store results for each disease
-        results = []
+        # Add each disease as a separate form field with the same name
+        # For multiple values with the same key in form data, we need to use a list of tuples
+        form_data_tuples = []
+        for d in disease:
+            form_data_tuples.append(("disease", d))
         
-        # Use the disease values from the Form parameter
-        # If none were provided, return an error
-        if not disease:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No disease parameter provided"
+        # Add the temporary token for authentication
+        form_data_tuples.append(("temp_token", temp_token))
+        
+        logger.info(f"Sending interpretation request to AI server for instance {instance_id} with diseases: {disease}")
+        
+        # Make the request to the AI server
+        try:
+            response = requests.post(
+                ai_server_url,
+                data=form_data_tuples,  # Use the list of tuples for multiple values with same key
+                timeout=60  # Set a reasonable timeout
             )
-        disease_values = disease
             
-        logger.info(f"Processing diseases: {disease_values}")
-
-        
-        # Process each disease
-        for disease_name in disease_values:
-            print('disease_name:',disease_name)
-            # Use AF as default if the requested disease is not available
-            if disease_name not in disease_map:
-                disease_name = "AF"
+            # Check if the request was successful
+            response.raise_for_status()
             
-            # Select a random directory for the disease (for variety)
-            result_dirs = disease_map[disease_name]
-            selected_dir = random.choice(result_dirs)
+            # Parse the JSON response
+            ai_response = response.json()
+            logger.info(f"Received interpretation response from AI server for instance {instance_id}")
             
-            # Path to the analysis report JSON file
-            base_path = Path("app/static/ecg_analysis_results")
-            report_path = base_path / selected_dir / "analysis_report.json"
+            # Return the AI server response directly
+            return ai_response
             
-            # Read the analysis report
-            with open(report_path, "r") as f:
-                report_data = json.load(f)
-            
-            # Update image paths to be full URLs with WEBSERVER_URI
-            image_paths = []
-            for img_path in report_data.get("image_paths", []):
-                image_paths.append(f"{settings.WEBSERVER_URI}/static/ecg_analysis_results/{selected_dir}/{img_path}")
-            
-            # Update the report data with the full image paths
-            report_data["image_paths"] = image_paths
-            
-            # Add instance_id and disease name to the response
-            report_data["instance_id"] = instance_id
-            report_data["disease"] = disease_name
-            
-            # Add this disease's report to the results list
-            results.append(report_data)
-        
-        # Return the list of report data
-        return results
+        except requests.Timeout:
+            logger.error(f"Interpretation request timed out for instance {instance_id}")
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Interpretation request timed out, please try again later"
+            )
+        except requests.HTTPError as e:
+            logger.error(f"AI server returned error for instance {instance_id}: {e.response.status_code} - {e.response.text}")
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"AI server error: {e.response.text}"
+            )
+        except requests.RequestException as e:
+            logger.error(f"Network error during interpretation request for instance {instance_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to connect to AI server, please check network connection"
+            )
+        except ValueError as e:
+            logger.error(f"Invalid JSON response from AI server for instance {instance_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invalid response from AI server"
+            )
             
     except Exception as e:
         import traceback
