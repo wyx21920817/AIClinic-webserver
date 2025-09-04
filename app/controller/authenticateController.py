@@ -149,7 +149,7 @@ async def get_temp_token():
         return JSONResponse(
             content={
                 "token": token,
-                "expires_in": 60,  # 60 seconds
+                "expires_in": 60000,  # 60 seconds
                 "token_type": "Bearer"
             },
             status_code=200
