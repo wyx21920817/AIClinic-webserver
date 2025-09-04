@@ -11,7 +11,7 @@ if [ -f ".pid" ]; then
 fi
 
 # Also check if port 8000 is in use
-pid=$(lsof -t -i:8001)
+pid=$(lsof -t -i:8000)
 if [ ! -z "$pid" ]; then
     echo "Killing process on port 8001: $pid"
     kill -9 $pid
