@@ -3,7 +3,7 @@ from fastapi.param_functions import Form
 from fastapi import Query
 from app.utils.logger_config import logger
 from app.core.config import settings
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
@@ -30,17 +30,273 @@ import tempfile
 from bson import ObjectId
 import requests
 import jwt
+import uuid
+import json
 from ..core.config import settings
+
+# Import ReportLab for PDF generation
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch, cm
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+import io
+import urllib.parse
 
 # Create ECG upload directory if it doesn't exist
 ECG_UPLOAD_DIR = Path("app/static/uploads/ecg")
 ECG_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Create ECG reports directory if it doesn't exist
+ECG_REPORTS_DIR = Path("app/static/reports/ecg")
+ECG_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(
     prefix="/api/ecg",
     tags=["ecg"],
     responses={404: {"description": "Not found"}}
 )
+
+
+def download_image(image_url, instance_id):
+    """
+    Download an image from the AI server and save it locally.
+    
+    Args:
+        image_url: The URL of the image on the AI server
+        instance_id: The instance ID for creating a local directory
+        
+    Returns:
+        Path to the downloaded image or None if download failed
+    """
+    try:
+        # Create directory for this instance's images if it doesn't exist
+        image_dir = ECG_REPORTS_DIR / instance_id
+        image_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get the image filename from the URL
+        image_filename = os.path.basename(image_url)
+        local_image_path = image_dir / image_filename
+        
+        # If image already exists locally, return the path
+        if local_image_path.exists():
+            return local_image_path
+        
+        # Construct the full URL to the image on the AI server
+        full_url = f"{settings.AISERVER_URI}{image_url}"
+        
+        # Download the image
+        response = requests.get(full_url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # Save the image locally
+        with open(local_image_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        return local_image_path
+    
+    except Exception as e:
+        logger.error(f"Error downloading image {image_url}: {str(e)}")
+        return None
+
+
+def generate_ecg_report_pdf(interpretation_data, output_path):
+    """
+    Generate a PDF report from the ECG interpretation data.
+    
+    Args:
+        interpretation_data: The interpretation data from the AI server
+        output_path: The path to save the PDF file
+    """
+    # Create a buffer for the PDF
+    buffer = io.BytesIO()
+    
+    # Create the PDF document
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=72,
+        leftMargin=72,
+        topMargin=72,
+        bottomMargin=72
+    )
+    
+    # Get the styles
+    styles = getSampleStyleSheet()
+    
+    # Create custom styles
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=16,
+        alignment=TA_CENTER,
+        spaceAfter=12
+    )
+    
+    heading_style = ParagraphStyle(
+        'Heading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceAfter=6
+    )
+    
+    normal_style = ParagraphStyle(
+        'Normal',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceAfter=6
+    )
+    
+    # Create the content elements
+    elements = []
+    
+    # Add the title
+    elements.append(Paragraph(f"ECG Interpretation Report", title_style))
+    elements.append(Spacer(1, 0.25*inch))
+    
+    # Add the instance ID
+    instance_id = interpretation_data.get("instance_id", "Unknown")
+    elements.append(Paragraph(f"Instance ID: {instance_id}", normal_style))
+    elements.append(Spacer(1, 0.1*inch))
+    
+    # Add the date
+    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    elements.append(Paragraph(f"Report Date: {current_date}", normal_style))
+    elements.append(Spacer(1, 0.25*inch))
+    
+    # Add the abnormalities section
+    abnormalities = interpretation_data.get("abnormalities", [])
+    if abnormalities:
+        elements.append(Paragraph("Detected Abnormalities:", heading_style))
+        for abnormality in abnormalities:
+            elements.append(Paragraph(f"• {abnormality}", normal_style))
+        elements.append(Spacer(1, 0.25*inch))
+    
+    # Add the results section
+    results = interpretation_data.get("results", [])
+    if results:
+        elements.append(Paragraph("Analysis Results:", heading_style))
+        elements.append(Spacer(1, 0.1*inch))
+        
+        for result in results:
+            status = result.get("status", "Unknown")
+            abnormality = result.get("abnormality", "Unknown")
+            
+            # Add the result header
+            elements.append(Paragraph(f"{abnormality} Analysis (Status: {status})", heading_style))
+            
+            if status == "ok":
+                # Add the report details
+                report = result.get("report", {})
+                if report:
+                    # Add the report title
+                    title = report.get("title", "")
+                    if title:
+                        elements.append(Paragraph(f"Title: {title}", normal_style))
+                    
+                    # Add the report text
+                    report_text = report.get("report_text", "")
+                    if report_text:
+                        # Split the report text by lines and add each line
+                        for line in report_text.split("\n"):
+                            elements.append(Paragraph(line, normal_style))
+                    
+                    # Add images if available
+                    image_paths = report.get("image_paths", {})
+                    if image_paths:
+                        elements.append(Spacer(1, 0.1*inch))
+                        elements.append(Paragraph("Images:", heading_style))
+                        
+                        # Download and add each image
+                        for image_name, image_url in image_paths.items():
+                            # Download the image
+                            local_image_path = download_image(image_url, instance_id)
+                            
+                            if local_image_path and local_image_path.exists():
+                                try:
+                                    # Add image caption
+                                    elements.append(Paragraph(f"{image_name}:", normal_style))
+                                    
+                                    # Add the image with a reasonable width
+                                    img = Image(str(local_image_path), width=5*inch, height=3*inch)
+                                    elements.append(img)
+                                    elements.append(Spacer(1, 0.1*inch))
+                                except Exception as e:
+                                    logger.error(f"Error adding image to PDF: {str(e)}")
+                                    elements.append(Paragraph(f"Error loading image: {image_name}", normal_style))
+                    
+                    # Add metrics if available
+                    metrics = report.get("metrics", {})
+                    if metrics:
+                        elements.append(Paragraph("Metrics:", heading_style))
+                        
+                        # Create a table for the metrics
+                        metrics_data = []
+                        for key, value in metrics.items():
+                            if isinstance(value, dict):
+                                # Handle nested dictionaries
+                                for sub_key, sub_value in value.items():
+                                    metrics_data.append([f"{key}.{sub_key}", str(sub_value)])
+                            else:
+                                metrics_data.append([key, str(value)])
+                        
+                        if metrics_data:
+                            # Create the table
+                            metrics_table = Table(metrics_data, colWidths=[2*inch, 3*inch])
+                            metrics_table.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                                ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                            ]))
+                            elements.append(metrics_table)
+                    
+                    # Add validation information if available
+                    validation = report.get("validation", {})
+                    if validation:
+                        elements.append(Spacer(1, 0.1*inch))
+                        elements.append(Paragraph("Validation:", heading_style))
+                        
+                        # Add validation status
+                        validation_status = validation.get("status", "Unknown")
+                        elements.append(Paragraph(f"Status: {validation_status}", normal_style))
+                        
+                        # Add validation reasons if available
+                        reasons = validation.get("reasons", [])
+                        if reasons:
+                            elements.append(Paragraph("Reasons:", normal_style))
+                            for reason in reasons:
+                                elements.append(Paragraph(f"• {reason}", normal_style))
+            else:
+                # Add the reason for skipping
+                reason = result.get("reason", "Unknown")
+                elements.append(Paragraph(f"Reason: {reason}", normal_style))
+            
+            elements.append(Spacer(1, 0.25*inch))
+    
+    # Add the message
+    message = interpretation_data.get("message", "")
+    if message:
+        elements.append(Paragraph("Message:", heading_style))
+        elements.append(Paragraph(message, normal_style))
+    
+    # Build the PDF
+    doc.build(elements)
+    
+    # Get the PDF data from the buffer
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    
+    # Write the PDF to the output path
+    with open(output_path, "wb") as f:
+        f.write(pdf_data)
+    
+    return output_path
 
 class ECGFileResponse(BaseModel):
     file_id: str
@@ -1035,6 +1291,260 @@ async def get_interpretation(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get interpretation: {str(e)}"
         )
+
+@router.post("/interpretation-pdf/{instance_id}")
+async def get_interpretation_pdf(
+    instance_id: str,
+    disease: List[str] = Form(...),  # 使用List[str]接收多个同名字段，...表示必需参数
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate a PDF report from the ECG interpretation data and provide a download link.
+    
+    Args:
+        instance_id: The Orthanc instance ID of the ECG file
+        disease: List of diseases to get interpretations for
+        current_user: Current authenticated user
+    
+    Form Data:
+        disease: One or more disease values to get interpretations for. 
+                To request multiple diseases, include multiple 'disease' fields in the form data.
+                Available options: AF, 1dAVB, LBBB, RBBB, ST
+                Default: AF
+    
+    Returns:
+        JSON response with the PDF download URL.
+        Response format:
+        {
+            "instance_id": "3725559d-2c4dd6c0-a3d79d14-e9d8f0ed-84bdb597",
+            "pdf_url": "/static/reports/ecg/3725559d-2c4dd6c0-a3d79d14-e9d8f0ed-84bdb597.pdf",
+            "status": "success"
+        }
+    """
+    # Log interpretation request
+    audit_log = AuditLogEntry(
+        event_type="data_access",
+        user_id=str(current_user.id),
+        action="interpretation_pdf",
+        resource_type="ecg_instance",
+        resource_id=instance_id,
+        details=f"Requested PDF interpretation report for ECG instance {instance_id}",
+        status="success",
+        username=current_user.username,
+        request_info={"diseases": disease}
+    )
+    audit_log.save()
+    
+    try:
+        # First, get the interpretation data from the AI server
+        ai_server_url = f"{settings.AISERVER_URI}/interprete/{instance_id}"
+        
+        # Generate JWT token with 5 minute expiry
+        payload = {
+            'exp': datetime.utcnow() + timedelta(minutes=5),
+            'iat': datetime.utcnow(),
+            'sub': str(current_user.id)
+        }
+        temp_token = jwt.encode(
+            payload,
+            settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM
+        )
+        logger.info("Successfully generated temporary token for interpretation request")
+        
+        # Prepare the form data
+        form_data_tuples = []
+        for d in disease:
+            form_data_tuples.append(("disease", d))
+        
+        # Add the temporary token for authentication
+        form_data_tuples.append(("temp_token", temp_token))
+        
+        logger.info(f"Sending interpretation request to AI server for instance {instance_id} with diseases: {disease}")
+        
+        # Make the request to the AI server
+        try:
+            response = requests.post(
+                ai_server_url,
+                data=form_data_tuples,
+                timeout=60
+            )
+            
+            # Check if the request was successful
+            response.raise_for_status()
+            
+            # Parse the JSON response
+            ai_response = response.json()
+            logger.info(f"Received interpretation response from AI server for instance {instance_id}")
+            
+            # Generate a PDF report from the interpretation data
+            pdf_filename = f"{instance_id}.pdf"
+            pdf_path = ECG_REPORTS_DIR / pdf_filename
+            
+            # Check if the PDF already exists
+            if not pdf_path.exists():
+                # Generate the PDF
+                logger.info(f"Generating PDF report for instance {instance_id}")
+                generate_ecg_report_pdf(ai_response, pdf_path)
+            else:
+                logger.info(f"PDF report for instance {instance_id} already exists, skipping generation")
+            
+            # Create the PDF download URL with base URL from settings
+            relative_path = f"/static/reports/ecg/{pdf_filename}"
+            pdf_url = f"{settings.WEBSERVER_URI}{relative_path}"
+            
+            # Return the PDF download URL
+            return {
+                "instance_id": instance_id,
+                "pdf_url": pdf_url,
+                "status": "success"
+            }
+            
+        except requests.Timeout:
+            logger.error(f"Interpretation request timed out for instance {instance_id}")
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Interpretation request timed out, please try again later"
+            )
+        except requests.HTTPError as e:
+            logger.error(f"AI server returned error for instance {instance_id}: {e.response.status_code} - {e.response.text}")
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"AI server error: {e.response.text}"
+            )
+        except requests.RequestException as e:
+            logger.error(f"Network error during interpretation request for instance {instance_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to connect to AI server, please check network connection"
+            )
+        except ValueError as e:
+            logger.error(f"Invalid JSON response from AI server for instance {instance_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invalid response from AI server"
+            )
+            
+    except Exception as e:
+        import traceback
+        logger.error(f"Error generating PDF report: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF report: {str(e)}"
+        )
+
+
+@router.post("/reports/{instance_id}/regenerate")
+async def regenerate_ecg_report_pdf(
+    instance_id: str,
+    disease: List[str] = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Regenerate a PDF report for a specific ECG instance.
+    
+    Args:
+        instance_id: The Orthanc instance ID of the ECG file
+        disease: List of diseases to get interpretations for
+        current_user: Current authenticated user
+    
+    Returns:
+        JSON response with the PDF download URL.
+    """
+    # Log regeneration request
+    audit_log = AuditLogEntry(
+        event_type="data_access",
+        user_id=str(current_user.id),
+        action="regenerate_pdf",
+        resource_type="ecg_report",
+        resource_id=instance_id,
+        details=f"Regenerated PDF report for ECG instance {instance_id}",
+        status="success",
+        username=current_user.username,
+        request_info={"diseases": disease}
+    )
+    audit_log.save()
+    
+    try:
+        # Check if the PDF exists and delete it
+        pdf_filename = f"{instance_id}.pdf"
+        pdf_path = ECG_REPORTS_DIR / pdf_filename
+        
+        if pdf_path.exists():
+            pdf_path.unlink()
+            logger.info(f"Deleted existing PDF report for instance {instance_id}")
+        
+        # Call the interpretation-pdf endpoint to regenerate the PDF
+        return await get_interpretation_pdf(instance_id, disease, current_user)
+        
+    except Exception as e:
+        logger.error(f"Error regenerating PDF report: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to regenerate PDF report: {str(e)}"
+        )
+
+
+@router.get("/reports/{instance_id}")
+async def get_ecg_report_pdf(
+    instance_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get the PDF report for a specific ECG instance.
+    
+    Args:
+        instance_id: The Orthanc instance ID of the ECG file
+        current_user: Current authenticated user
+    
+    Returns:
+        The PDF file as a download.
+        
+    Note:
+        This endpoint returns the actual PDF file for download.
+        For just the URL, use the interpretation-pdf endpoint.
+    """
+    # Log report access
+    audit_log = AuditLogEntry(
+        event_type="data_access",
+        user_id=str(current_user.id),
+        action="download_report",
+        resource_type="ecg_report",
+        resource_id=instance_id,
+        details=f"Downloaded PDF report for ECG instance {instance_id}",
+        status="success",
+        username=current_user.username
+    )
+    audit_log.save()
+    
+    try:
+        # Check if the PDF exists
+        pdf_filename = f"{instance_id}.pdf"
+        pdf_path = ECG_REPORTS_DIR / pdf_filename
+        
+        if not pdf_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PDF report not found"
+            )
+        
+        # Return the PDF file
+        return FileResponse(
+            path=str(pdf_path),
+            media_type="application/pdf",
+            filename=pdf_filename
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting PDF report: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get PDF report: {str(e)}"
+        )
+
 
 @router.get("/{user_id}/instances/{instance_id}", response_model=ECGFileResponse)
 async def get_ecg_instances_file(
