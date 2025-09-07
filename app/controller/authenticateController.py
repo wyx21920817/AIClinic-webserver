@@ -65,7 +65,7 @@ async def verify_token(authorization: str = Header(None)):
         # Handle temporary token
         if payload.get('temp', False) and payload.get('orthanc_access', False):
             response_data.update({
-                "validity": 60,  # Temporary token cached for 1 minute only
+                "validity": 60000,  # Temporary token cached for 1 minute only
                 "labels": ["view", "upload", "modify", "all"],
                 "user": "orthanc_temp_access",
                 "is_temp": True
