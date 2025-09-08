@@ -105,11 +105,19 @@ def download_image(image_url, instance_id):
 def generate_ecg_report_pdf(interpretation_data, output_path):
     """
     Generate a PDF report from the ECG interpretation data.
+    If a PDF already exists at the output path, it will be deleted first.
     
     Args:
         interpretation_data: The interpretation data from the AI server
         output_path: The path to save the PDF file
     """
+    # Check if the PDF already exists and delete it if it does
+    if os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+            logger.info(f"Deleted existing PDF at {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete existing PDF at {output_path}: {str(e)}")
     # Create a buffer for the PDF
     buffer = io.BytesIO()
     
@@ -1292,12 +1300,7 @@ async def get_interpretation_pdf(
         disease: List of diseases to get interpretations for
         current_user: Current authenticated user
     
-    Form Data:
-        disease: One or more disease values to get interpretations for. 
-                To request multiple diseases, include multiple 'disease' fields in the form data.
-                Available options: AF, 1dAVB, LBBB, RBBB, ST
-                Default: AF
-    
+
     Returns:
         JSON response with the PDF download URL.
         Response format:
