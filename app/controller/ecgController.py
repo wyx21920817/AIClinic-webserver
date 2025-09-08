@@ -1370,13 +1370,9 @@ async def get_interpretation_pdf(
             pdf_filename = f"{instance_id}.pdf"
             pdf_path = ECG_REPORTS_DIR / pdf_filename
             
-            # Check if the PDF already exists
-            if not pdf_path.exists():
-                # Generate the PDF
-                logger.info(f"Generating PDF report for instance {instance_id}")
-                generate_ecg_report_pdf(ai_response, pdf_path)
-            else:
-                logger.info(f"PDF report for instance {instance_id} already exists, skipping generation")
+            # Always generate a new PDF
+            logger.info(f"Generating PDF report for instance {instance_id}")
+            generate_ecg_report_pdf(ai_response, pdf_path)
             
             # Create the PDF download URL with base URL from settings
             relative_path = f"/static/reports/ecg/{pdf_filename}"
