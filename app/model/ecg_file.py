@@ -7,7 +7,7 @@ class EcgFile(Document):
     patient_id = ReferenceField(Patient, required=True)
     dicom_uid = StringField(required=True, unique=True)
     uploaded_by = ReferenceField(User, required=True)
-    tags = StringField()
+    tags = ListField(StringField(), default=list)
     notes = StringField()
     diagnosis_result = DictField(default={})
     instanceIDs = ListField(StringField(), default=list)  # Store all related instance IDs
