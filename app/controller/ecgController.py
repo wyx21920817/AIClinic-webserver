@@ -601,7 +601,7 @@ async def update_ecg_file(
         
         # Return the updated ECG file information
         return ECGFileResponse(
-            id=str(ecg_file.id),
+            file_id=str(ecg_file.id),
             user_id=user_id,
             filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm') if instance_details else "unknown.dcm",
             created_at=ecg_file.created_at,
@@ -617,7 +617,7 @@ async def update_ecg_file(
         print(f"Full error traceback: {traceback.format_exc()}")  # Debug
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create new ECG file: {str(e)}"
+            detail=f"Failed to update ECG record: {str(e)}"
         )
 
 @router.delete("/{user_id}/files/{instance_id}")
