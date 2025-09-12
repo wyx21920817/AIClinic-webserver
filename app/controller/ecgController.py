@@ -84,7 +84,7 @@ def download_image(image_url, instance_id):
             return local_image_path
         
         # Construct the full URL to the image on the AI server
-        full_url = f"{settings.AISERVER_URI}{image_url}"
+        full_url = f"{image_url}"
         
         # Download the image
         response = requests.get(full_url, stream=True, timeout=30)
