@@ -526,9 +526,9 @@ async def get_ecg_file(
 async def update_ecg_file(
     user_id: str,
     instance_id: str,
-    notes: str = Form(...),
-    tags: str = Form(...),
-    approved_status: bool = Form(...),
+    notes: str = Form(""),
+    tags: str = Form(""),
+    approved_status: bool = Form(False),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -559,8 +559,10 @@ async def update_ecg_file(
                 detail="ECG file not found"
             )
 
-        # Convert tags string to list
-        tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
+        # Convert tags string to list, handling empty tags properly
+        tag_list = []
+        if tags and tags.strip():
+            tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
         logger.info(f"Updating ECG file with tags: {tag_list}")
         
         # Get patient record to verify it exists
