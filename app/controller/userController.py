@@ -70,8 +70,8 @@ class PaginatedUserResponse(BaseModel):
 
 def generate_mfa_code(username: str = None):
     """Generate a 6-digit verification code
-    If username is '123', returns fixed code '111111' for testing purposes"""
-    if username == '123':
+    If username is 'test', returns fixed code '111111' for testing purposes"""
+    if username == 'test':
         return '111111'
     return ''.join(random.choices(string.digits, k=6))
 
@@ -199,7 +199,10 @@ async def verify_mfa(
     if not user.mfa_code:
         raise HTTPException(status_code=401, detail="No verification code found")
     
-    if user.mfa_code != mfa_code:
+    # Special case for 'test' account - always accept '111111' as valid code
+    if username == 'test' and mfa_code == '111111':
+        pass  # Allow verification to proceed
+    elif user.mfa_code != mfa_code:
         # Log failed MFA attempt
         AuditLog.log_auth(
             user_id=str(user.id),
