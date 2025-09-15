@@ -102,7 +102,7 @@ def download_image(image_url, instance_id):
         return None
 
 
-def generate_ecg_report_pdf(interpretation_data, output_path):
+def generate_ecg_report_pdf(interpretation_data, output_path, notes=None, approved_status=None):
     """
     Generate a PDF report from the ECG interpretation data.
     If a PDF already exists at the output path, it will be deleted first.
@@ -110,6 +110,8 @@ def generate_ecg_report_pdf(interpretation_data, output_path):
     Args:
         interpretation_data: The interpretation data from the AI server
         output_path: The path to save the PDF file
+        notes: Optional notes from the ECG file
+        approved_status: Optional approval status from the ECG file
     """
     # Check if the PDF already exists and delete it if it does
     if os.path.exists(output_path):
@@ -173,6 +175,18 @@ def generate_ecg_report_pdf(interpretation_data, output_path):
     current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     elements.append(Paragraph(f"Report Date: {current_date}", normal_style))
     elements.append(Spacer(1, 0.25*inch))
+    
+    # Add notes if available
+    if notes:
+        elements.append(Paragraph("Notes:", heading_style))
+        elements.append(Paragraph(notes, normal_style))
+        elements.append(Spacer(1, 0.25*inch))
+    
+    # Add approval status if available
+    if approved_status is not None:
+        status_text = "Approved" if approved_status else "Not Approved"
+        elements.append(Paragraph(f"Approval Status: {status_text}", normal_style))
+        elements.append(Spacer(1, 0.25*inch))
     
     # Add the abnormalities section
     abnormalities = interpretation_data.get("abnormalities", [])
@@ -1372,9 +1386,24 @@ async def get_interpretation_pdf(
             pdf_filename = f"{instance_id}.pdf"
             pdf_path = ECG_REPORTS_DIR / pdf_filename
             
+            # Try to find the ECG file with this instance ID
+            ecg_file = None
+            try:
+                ecg_file = EcgFile.objects(instanceIDs__contains=instance_id).first()
+                logger.info(f"Found ECG file for instance {instance_id}: {ecg_file.id if ecg_file else 'None'}")
+            except Exception as e:
+                logger.warning(f"Error finding ECG file for instance {instance_id}: {str(e)}")
+            
+            # Get notes and approval status if ECG file exists
+            notes = None
+            approved_status = None
+            if ecg_file:
+                notes = ecg_file.notes
+                approved_status = ecg_file.Approved_status
+            
             # Always generate a new PDF
             logger.info(f"Generating PDF report for instance {instance_id}")
-            generate_ecg_report_pdf(ai_response, pdf_path)
+            generate_ecg_report_pdf(ai_response, pdf_path, notes, approved_status)
             
             # Create the PDF download URL with base URL from settings
             relative_path = f"/static/reports/ecg/{pdf_filename}"
