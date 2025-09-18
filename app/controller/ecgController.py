@@ -950,7 +950,7 @@ async def get_patient_ecg_files(
                             user_id=patient_id,
                             filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
                             created_at=created_at,
-                            notes=ecg_file.notes,
+                            notes=ecg_file.notes or '',
                             tags=ecg_file.tags,
                             dicom_uid=ecg_file.dicom_uid,
                             content=str(instance_details),
