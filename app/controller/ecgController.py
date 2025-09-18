@@ -927,35 +927,45 @@ async def get_patient_ecg_files(
             ecg_files = []
             for ecg_file in ecg_files_db:
                 try:
-                    instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
-                    if isinstance(instance_details, dict):
-                        # Get instance creation time from DICOM tags
-                        dicom_date = instance_details.get('MainDicomTags', {}).get('InstanceCreationDate')
-                        dicom_time = instance_details.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
-                        if '.' in dicom_time:  # Handle time format that may contain decimal points
-                            dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
+                    # instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
+                    # if isinstance(instance_details, dict):
+                    #     # Get instance creation time from DICOM tags
+                    #     dicom_date = instance_details.get('MainDicomTags', {}).get('InstanceCreationDate')
+                    #     dicom_time = instance_details.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
+                    #     if '.' in dicom_time:  # Handle time format that may contain decimal points
+                    #         dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
                         
-                        # Parse DICOM datetime format (YYYYMMDD HHMMSS)
-                        try:
-                            if dicom_date:
-                                created_at = datetime.strptime(f"{dicom_date}{dicom_time}", '%Y%m%d%H%M%S')
-                            else:
-                                created_at = datetime.now()
-                        except ValueError:
-                            logger.warning(f"Invalid DICOM date/time format: {dicom_date} {dicom_time}. Using current time.")
-                            created_at = datetime.now()
+                    #     # Parse DICOM datetime format (YYYYMMDD HHMMSS)
+                    #     try:
+                    #         if dicom_date:
+                    #             created_at = datetime.strptime(f"{dicom_date}{dicom_time}", '%Y%m%d%H%M%S')
+                    #         else:
+                    #             created_at = datetime.now()
+                    #     except ValueError:
+                    #         logger.warning(f"Invalid DICOM date/time format: {dicom_date} {dicom_time}. Using current time.")
+                    #         created_at = datetime.now()
                             
-                        ecg_files.append(ECGFileResponse(
-                            file_id=str(ecg_file.dicom_uid),  # Use MongoDB ID as file_id
-                            user_id=patient_id,
-                            filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
-                            created_at=created_at,
-                            notes=ecg_file.notes,
-                            tags=ecg_file.tags,
-                            dicom_uid=ecg_file.dicom_uid,
-                            content=str(instance_details),
-                            instanceIDs=ecg_file.instanceIDs
-                        ))
+                    #     ecg_files.append(ECGFileResponse(
+                    #         file_id=str(ecg_file.dicom_uid),  # Use MongoDB ID as file_id
+                    #         user_id=patient_id,
+                    #         filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+                    #         created_at=created_at,
+                    #         notes=ecg_file.notes,
+                    #         tags=ecg_file.tags,
+                    #         dicom_uid=ecg_file.dicom_uid,
+                    #         content=str(instance_details),
+                    #         instanceIDs=ecg_file.instanceIDs
+                    #     ))
+
+                    ecg_files.append(ECGFileResponse(
+                        file_id=str(ecg_file.dicom_uid),  # Use MongoDB ID as file_id
+                        user_id=patient_id,
+                        created_at=created_at,
+                        notes=ecg_file.notes,
+                        tags=ecg_file.tags,
+                        dicom_uid=ecg_file.dicom_uid,
+                        instanceIDs=ecg_file.instanceIDs
+                    ))
                 except Exception as e:
                     logger.error(f"Error getting instance details for ECG file {ecg_file.dicom_uid}: {str(e)}")
                     continue
