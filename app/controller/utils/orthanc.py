@@ -136,7 +136,7 @@ def get_instance(instance_id: str, token: str):
             f"{ORTHANC_SERVER_URL}/instances/{instance_id}",
             headers=get_headers(token)
         )
-        
+        print(response)
         if response.status_code == 200:
             return response.json()
         else:

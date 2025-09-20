@@ -927,11 +927,12 @@ async def get_patient_ecg_files(
             ecg_files = []
             for ecg_file in ecg_files_db:
                 try:
-                    instance_details = get_instance(ecg_file.dicom_uid, token=current_user.token)
+                    instance_details = get_instance_tags(ecg_file.dicom_uid, token=current_user.token)
                     if isinstance(instance_details, dict):
                         # Get instance creation time from DICOM tags
-                        dicom_date = instance_details.get('MainDicomTags', {}).get('InstanceCreationDate')
-                        dicom_time = instance_details.get('MainDicomTags', {}).get('InstanceCreationTime', '000000')
+                        # Using StudyDate and StudyTime from the new tag structure
+                        dicom_date = instance_details.get('StudyDate')
+                        dicom_time = instance_details.get('StudyTime', '000000')
                         if '.' in dicom_time:  # Handle time format that may contain decimal points
                             dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
                         
@@ -944,14 +945,21 @@ async def get_patient_ecg_files(
                         except ValueError:
                             logger.warning(f"Invalid DICOM date/time format: {dicom_date} {dicom_time}. Using current time.")
                             created_at = datetime.now()
-                            
+                        
+                        # Extract filename or use SOPInstanceUID as filename if not available
+                        filename = f"{instance_details.get('SOPInstanceUID', 'unknown')}.dcm"
+                        
+                        
+                        # Add ECG-specific information to tags if available
+                        tags = ecg_file.tags or []
+                        
                         ecg_files.append(ECGFileResponse(
-                            file_id=str(ecg_file.dicom_uid),  # Use MongoDB ID as file_id
+                            file_id=str(ecg_file.dicom_uid),
                             user_id=patient_id,
-                            filename=instance_details.get('MainDicomTags', {}).get('FileName', 'unknown.dcm'),
+                            filename=filename,
                             created_at=created_at,
                             notes=ecg_file.notes or '',
-                            tags=ecg_file.tags,
+                            tags=tags,
                             dicom_uid=ecg_file.dicom_uid,
                             content=str(instance_details),
                             instanceIDs=ecg_file.instanceIDs
