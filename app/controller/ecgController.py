@@ -1214,7 +1214,7 @@ async def get_interpretation(
     try:
         # Prepare the request to the AI server
         ai_server_url = f"{settings.AISERVER_URI}/interprete/{instance_id}"
-        
+        logger.info("ai_server_url: ", ai_server_url)
         # Generate JWT token with 5 minute expiry
         payload = {
             'exp': datetime.utcnow() + timedelta(minutes=5),
