@@ -7,9 +7,7 @@ networks:
 
 services:
   webserver:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: balalabalala/aiclinic-webserver:latest
     container_name: webserver
     ports:
       - "8000:8000"
@@ -29,9 +27,7 @@ services:
       - aiclinic-net
 
   webserverauth:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: balalabalala/aiclinic-webserver:latest
     container_name: webserverauth
     ports:
       - "8001:8001"
