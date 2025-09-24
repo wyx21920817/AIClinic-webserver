@@ -15,7 +15,7 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
-      - MONGODB_URI=mongodb+srv://bingbing19901:pjL5A5WgpI8ahTdl@cluster0.ytrifje.mongodb.net/aiclinic?retryWrites=true&w=majority&appName=Cluster0
+      - MONGODB_URI=mongodb://mongodb:27017/aiclinic
       - AISERVER_URI=http://ai_server:8000
       - ORTHANC_SERVER_URL=http://orthanc:8042
       - AUTH_SERVER_URL=http://webserverauth:8001
@@ -37,7 +37,7 @@ services:
       - "8001:8001"
     environment:
       - PORT=8001
-      - MONGODB_URI=mongodb+srv://bingbing19901:pjL5A5WgpI8ahTdl@cluster0.ytrifje.mongodb.net/aiclinic?retryWrites=true&w=majority&appName=Cluster0
+      - MONGODB_URI=mongodb://mongodb:27017/aiclinic
       - AISERVER_URI=http://ai_server:8000
       - ORTHANC_SERVER_URL=http://orthanc:8042
       - AUTH_SERVER_URL=http://webserverauth:8001
