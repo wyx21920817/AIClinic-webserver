@@ -50,16 +50,17 @@ def upload_file(
 ):
     temp_dir = None
     try:
-        # 确保文件被正确关闭
         try:
-            # 获取临时token
             headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
             try:
+                # 使用环境变量中的认证服务器URL
+                auth_url = f"{settings.AUTH_SERVER_URL}/api/auth/temp-token"
+                logger.info(f"Requesting temp token from: {auth_url}")
                 response = requests.get(
-                    'http://54.79.181.49:8001/api/auth/temp-token',
+                    auth_url,
                     headers=headers,
                     verify=False,
                     timeout=5.0

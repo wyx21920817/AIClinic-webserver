@@ -10,15 +10,18 @@ if [ -f ".pid" ]; then
     rm .pid
 fi
 
-# Also check if port 8000 is in use
-pid=$(lsof -t -i:8000)
+# Get port from environment variable or default to 8000
+PORT=${PORT}
+
+# Also check if the port is in use
+pid=$(lsof -t -i:$PORT)
 if [ ! -z "$pid" ]; then
-    echo "Killing process on port 8001: $pid"
+    echo "Killing process on port $PORT: $pid"
     kill -9 $pid
 fi
 
-echo "Starting server..."
-nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+echo "Starting server on port $PORT..."
+nohup python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT > server.log 2>&1 &
 echo $! > .pid
 
 echo "Server started with PID: $(cat .pid)"

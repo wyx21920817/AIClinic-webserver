@@ -28,19 +28,23 @@ RUN pip install --upgrade pip && \
 # Copy the rest of the application
 COPY . .
 
-# Fix line endings and make restart.sh executable
-RUN sed -i 's/\r$//' restart.sh && chmod +x restart.sh
-
-# Create a modified restart script that runs in foreground instead of background
-RUN sed -i 's/nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 > server.log 2>\&1 \&/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000/' restart.sh && \
-    sed -i '/echo $! > .pid/d' restart.sh && \
-    sed -i '/echo "Server started with PID: $(cat .pid)"/d' restart.sh
+# Create a new restart.sh script that properly uses environment variables
+RUN rm -f restart.sh && \
+    echo '#!/bin/bash' > restart.sh && \
+    echo '' >> restart.sh && \
+    echo 'echo "Starting server on port $PORT..."' >> restart.sh && \
+    echo 'python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT' >> restart.sh && \
+    chmod +x restart.sh
 
 # Create necessary directories
 RUN mkdir -p docs
 
+# Default port (can be overridden at build time)
+ENV PORT=${PORT}
+
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE ${PORT}
 
 # Command to run the application
-CMD ["/bin/bash", "-c", "./restart.sh && tail -f server.log"]
+# Using shell form to ensure environment variables are expanded
+CMD ./restart.sh

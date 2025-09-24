@@ -16,7 +16,6 @@ htmlcov
 .dmypy.json
 dmypy.json
 *.so
-.env
 .venv
 env/
 venv/

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     
     # Web server settings
     WEBSERVER_URI: str = os.getenv('WEBSERVER_URI', 'http://localhost:8000')
+    
+    # Auth server settings
+    AUTH_SERVER_URL: str = os.getenv('AUTH_SERVER_URL', 'http://webserverauth:8001')
 
     # Logging settings
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')

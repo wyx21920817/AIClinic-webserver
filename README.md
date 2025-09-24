@@ -156,14 +156,44 @@ The project follows modern software development practices:
 
 ### Building the Docker Image
 
+默认构建（使用默认端口8000）：
 ```bash
 docker build -t aiclinic-webserver .
+```
+
+使用自定义端口构建（例如使用端口9000）：
+```bash
+docker build -t aiclinic-webserver --build-arg PORT=9000 .
+```
+
+### Setting up Docker Network
+
+Create a dedicated network for AIClinic services to communicate with each other:
+
+```bash
+docker network create aiclinic-net
+```
+
+Connect existing containers to this network:
+
+```bash
+docker network connect aiclinic-net ai_server
+docker network connect aiclinic-net webserver
 ```
 
 ### Running the Docker Container
 
 ```bash
+# 使用默认端口8000
 docker run -d -p 8000:8000 --name aiclinic-server \
+  --network aiclinic-net \
+  --env-file .env \
+  aiclinic-webserver
+
+# 使用自定义端口（例如9000）
+docker run -d -p 9000:9000 --name aiclinic-server \
+  --network aiclinic-net \
+  -e PORT=9000 \
   --env-file .env \
   aiclinic-webserver
 ```
@@ -172,6 +202,7 @@ Alternatively, you can specify environment variables directly in the command:
 
 ```bash
 docker run -d -p 8000:8000 --name aiclinic-server \
+  --network aiclinic-net \
   -e MONGODB_URI=mongodb://host.docker.internal:27017/aiclinic \
   -e ORTHANC_SERVER_URL=http://host.docker.internal:8042 \
   -e JWT_SECRET_KEY=your-secret-key \
@@ -179,6 +210,16 @@ docker run -d -p 8000:8000 --name aiclinic-server \
 ```
 
 Note: When using Docker, you may need to use `host.docker.internal` instead of `localhost` to connect to services running on the host machine.
+
+### Docker Networking
+
+Using a dedicated Docker network (`aiclinic-net`) allows containers to communicate with each other using their container names as hostnames. This simplifies configuration and improves security by isolating these services from other Docker containers.
+
+When using the Docker network:
+- Use container names instead of IP addresses in your configuration
+- For example, if your AI server container is named `ai_server`, you can use `http://ai_server:9000` as the `AISERVER_URI` in your `.env` file
+- Similarly, for MongoDB: `mongodb://mongodb:27017/aiclinic`
+- And for Orthanc: `http://orthanc:8042`
 
 The application will be available at http://localhost:8000
 

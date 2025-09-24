@@ -1,22 +1,51 @@
 version: '3'
 
+networks:
+  aiclinic-net:
+    external: true
+    name: aiclinic-net
+
 services:
-  aiclinic-webserver:
+  webserver:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aiclinic-webserver
+    container_name: webserver
     ports:
       - "8000:8000"
     environment:
+      - PORT=8000
       - MONGODB_URI=mongodb+srv://bingbing19901:pjL5A5WgpI8ahTdl@cluster0.ytrifje.mongodb.net/aiclinic?retryWrites=true&w=majority&appName=Cluster0
-      - AISERVER_URI=http://host.docker.internal:9000
-      - ORTHANC_SERVER_URL=http://54.79.181.49:8042
+      - AISERVER_URI=http://ai_server:8000
+      - ORTHANC_SERVER_URL=http://orthanc:8042
+      - AUTH_SERVER_URL=http://webserverauth:8001
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
       - ./dicom_files:/app/dicom_files
       - ./waveform_results:/app/waveform_results
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - aiclinic-net
+
+  webserverauth:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: webserverauth
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - MONGODB_URI=mongodb+srv://bingbing19901:pjL5A5WgpI8ahTdl@cluster0.ytrifje.mongodb.net/aiclinic?retryWrites=true&w=majority&appName=Cluster0
+      - AISERVER_URI=http://ai_server:8000
+      - ORTHANC_SERVER_URL=http://orthanc:8042
+      - AUTH_SERVER_URL=http://webserverauth:8001
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./dicom_files:/app/dicom_files
+      - ./waveform_results:/app/waveform_results
+    restart: unless-stopped
+    networks:
+      - aiclinic-net

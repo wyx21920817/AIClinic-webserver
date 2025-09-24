@@ -1313,7 +1313,7 @@ async def get_interpretation(
 @router.post("/interpretation-pdf/{instance_id}")
 async def get_interpretation_pdf(
     instance_id: str,
-    disease: List[str] = Form(...),  # 使用List[str]接收多个同名字段，...表示必需参数
+    disease: List[str] = Form(...),  # Use List[str] to receive multiple fields with the same name, ... indicates required parameter
     current_user: User = Depends(get_current_user)
 ):
     """
