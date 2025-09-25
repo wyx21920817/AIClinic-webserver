@@ -508,7 +508,7 @@ async def register(
         user = User(
             username=username,
             email=email,
-            role=UserRole.DOCTOR  # New users default to doctor role
+            role=UserRole.ADMIN  # New users default to doctor role
         )
         user.set_password(password)
         user.save()

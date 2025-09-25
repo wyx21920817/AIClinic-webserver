@@ -73,29 +73,29 @@ def upload_file(
                 logger.info("Successfully obtained temporary token")
             except requests.Timeout:
                 logger.error("Token request timed out after 5 seconds")
-                raise HTTPException(status_code=504, detail="获取临时令牌超时，请稍后重试")
+                raise HTTPException(status_code=504, detail="Token request timed out after 5 seconds")
             except requests.HTTPError as e:
                 logger.error(f"Failed to get temp token. Status: {e.response.status_code}, Response: {e.response.text}")
                 raise HTTPException(
                     status_code=e.response.status_code,
-                    detail=f"获取临时令牌失败: {e.response.text}"
+                    detail=f"Failed to get temp token: {e.response.text}"
                 )
             except requests.RequestException as e:
                 logger.error(f"Network error while getting token: {str(e)}")
-                raise HTTPException(status_code=503, detail="无法连接到认证服务器，请检查网络连接")
+                raise HTTPException(status_code=503, detail="Failed to connect to authentication server, please check network connection")
         except Exception as e:
-            logger.error(f"获取临时令牌失败: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"获取临时令牌失败: {str(e)}")
+            logger.error(f"Failed to get temp token: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to get temp token: {str(e)}")
             
         # 生成唯一的文件ID并创建临时目录
         file_id = str(uuid.uuid4())
         temp_dir = settings.UPLOAD_DIR / file_id
         temp_dir.mkdir(exist_ok=True, parents=True)
-        logger.info(f"创建临时目录: {temp_dir}")
+        logger.info(f"Created temporary directory: {temp_dir}")
         
         # 保存上传的文件
         temp_file = temp_dir / file.filename
-        logger.info(f"保存上传文件: {temp_file}")
+        logger.info(f"Saved uploaded file: {temp_file}")
         
         try:
             # 保存上传的文件
@@ -112,7 +112,7 @@ def upload_file(
                 required_tags = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'SOPInstanceUID']
                 missing_tags = [tag for tag in required_tags if not hasattr(dicom_data, tag)]
                 if missing_tags:
-                    error_msg = f"缺少必需的DICOM标签: {', '.join(missing_tags)}"
+                    error_msg = f"Missing required DICOM tags: {', '.join(missing_tags)}"
                     logger.error(error_msg)
                     return JSONResponse(
                         status_code=400,
@@ -124,7 +124,7 @@ def upload_file(
                 try:
                     response = upload_dicom_file(str(temp_file), temp_token)
                 except Exception as e:
-                    error_msg = f"上传到Orthanc服务器失败: {str(e)}"
+                    error_msg = f"Failed to upload to Orthanc server: {str(e)}"
                     logger.error(error_msg)
                     raise HTTPException(status_code=500, detail=error_msg)
                 
@@ -146,7 +146,7 @@ def upload_file(
                 
                 response_data = {
                     "status": "success",
-                    "message": "DICOM文件已上传到Orthanc服务器",
+                    "message": "DICOM file upload Orthanc server success",
                     "instance_id": instance_id,
                     "parent_info": parent_info
                 }
@@ -156,20 +156,20 @@ def upload_file(
                 )
             except Exception as e:
                 error_msg = str(e)
-                logger.error(f"DICOM验证或上传失败: {error_msg}")
+                logger.error(f"DICOM file validation or upload failed: {error_msg}")
                 return JSONResponse(
                     status_code=400,
-                    content={"detail": f"无效的DICOM文件或上传失败: {error_msg}"}
+                    content={"detail": f"Invalid DICOM file or upload failed: {error_msg}"}
                 )
                 
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"文件处理失败: {error_msg}")
+            logger.error(f"DICOM file processing failed: {error_msg}")
             raise HTTPException(status_code=400, detail=error_msg)
             
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"上传失败: {error_msg}")
+        logger.error(f"DICOM file upload failed: {error_msg}")
         return JSONResponse(
             status_code=500,
             content={"detail": error_msg}
@@ -180,7 +180,7 @@ def upload_file(
             # 确保文件被关闭
             file.file.close()
         except Exception as e:
-            logger.error(f"关闭文件失败: {str(e)}")
+            logger.error(f"Failed to close file: {str(e)}")
         
         # 确保临时目录始终被清理
         if temp_dir is not None and temp_dir.exists():
@@ -188,13 +188,13 @@ def upload_file(
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 logger.debug(f"Cleaned up temporary directory: {temp_dir}")
             except Exception as e:
-                logger.error(f"清理临时目录失败: {str(e)}")
+                logger.error(f"Failed to clean up temporary directory: {str(e)}")
 
 @router.get("/status/{task_id}")
 async def get_task_status(task_id: str):
     """获取任务状态"""
     if task_id not in conversion_tasks:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise HTTPException(status_code=404, detail="Task not found")
     
     return conversion_tasks[task_id]
 
