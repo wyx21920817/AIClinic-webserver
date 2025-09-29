@@ -1022,6 +1022,34 @@ async def diagnose_ecg(
     audit_log.save()
     
     try:
+        # Find the original ECG file record first to check if it's already diagnosed
+        original_ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
+        if not original_ecg_file:
+            logger.error(f"ECG file not found for instance_id: {instance_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ECG file not found"
+            )
+        
+        # Check if the ECG file has already been diagnosed
+        if original_ecg_file.is_ai_diagnosed:
+            logger.info(f"ECG file {instance_id} has already been diagnosed, returning existing diagnosis")
+            
+            # Return the existing diagnosis result
+            diagnosis_result = DiagnosisResult(
+                original_dnn_model=original_ecg_file.diagnosis_result.get('original_dnn_model'),
+                resnet_fine_tuned_model=original_ecg_file.diagnosis_result.get('resnet_fine_tuned_model'),
+                status="success",
+                message=f"ECG instance {instance_id} has already been diagnosed"
+            )
+            
+            return DiagnosisResponse(
+                instance_id=instance_id,
+                diagnosis_result=diagnosis_result,
+                created_at=original_ecg_file.updated_at,
+                status='completed'
+            )
+            
         # Generate temporary token locally
         headers = {
             'Accept': 'application/json',
@@ -1062,17 +1090,17 @@ async def diagnose_ecg(
             
             logger.info(f"Received AI diagnosis response with modified_instance_id: {modified_instance_id}")
             
-            # Find the original ECG file record
+            # We already have the original_ecg_file from earlier check
             try:
-                original_ecg_file = EcgFile.objects(dicom_uid=instance_id).first()
-                if not original_ecg_file:
-                    logger.error(f"ECG file not found for instance_id: {instance_id}")
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="ECG file not found"
-                    )
                 
-                # Create a new ECG file record with the modified instance ID
+                # Always update the original record with diagnosis results
+                original_ecg_file.diagnosis_result = predictions
+                original_ecg_file.is_ai_diagnosed = True  # Mark as diagnosed by AI
+                original_ecg_file.save()
+                
+                logger.info(f"Updated original ECG file {instance_id} with diagnosis result")
+                
+                # If there's a modified instance ID, also create a new ECG file record
                 if modified_instance_id:
                     # Create a new ECG file record
                     new_ecg_file = EcgFile(
@@ -1082,7 +1110,8 @@ async def diagnose_ecg(
                         notes=original_ecg_file.notes,
                         tags=original_ecg_file.tags,
                         uploaded_by=current_user.id,
-                        diagnosis_result=predictions  # Store predictions as diagnosis result
+                        diagnosis_result=predictions,  # Store predictions as diagnosis result
+                        is_ai_diagnosed=True  # Mark as diagnosed by AI
                     )
                     new_ecg_file.save()
                     
@@ -1102,15 +1131,8 @@ async def diagnose_ecg(
                     )
                     audit_log.save()
                     
-                    # Use the new ECG file for the response
-                    ecg_file = new_ecg_file
-                else:
-                    # If no modified_instance_id is provided, update the original record
-                    original_ecg_file.diagnosis_result = predictions
-                    original_ecg_file.save()
-                    ecg_file = original_ecg_file
-                    
-                    logger.info(f"Updated original ECG file {instance_id} with diagnosis result")
+                # Use the original ECG file for the response
+                ecg_file = original_ecg_file
                 
                 # Return the diagnosis result from the appropriate ECG file
                 # Use the AI server's predictions directly
