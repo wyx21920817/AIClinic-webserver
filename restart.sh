@@ -11,7 +11,7 @@ if [ -f ".pid" ]; then
 fi
 
 # Get port from environment variable or default to 8000
-PORT=${PORT}
+PORT=8000
 
 # Also check if the port is in use
 pid=$(lsof -t -i:$PORT)
@@ -21,7 +21,7 @@ if [ ! -z "$pid" ]; then
 fi
 
 echo "Starting server on port $PORT..."
-nohup python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT > server.log 2>&1 &
+nohup python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT --workers 4 > server.log 2>&1 &
 echo $! > .pid
 
 echo "Server started with PID: $(cat .pid)"
