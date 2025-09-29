@@ -1044,7 +1044,7 @@ async def diagnose_ecg(
             )
             
             return DiagnosisResponse(
-                instance_id=instance_id,
+                instance_id=original_ecg_file.instanceIDs[-1],
                 diagnosis_result=diagnosis_result,
                 created_at=original_ecg_file.updated_at,
                 status='completed'
@@ -1096,6 +1096,7 @@ async def diagnose_ecg(
                 # Always update the original record with diagnosis results
                 original_ecg_file.diagnosis_result = predictions
                 original_ecg_file.is_ai_diagnosed = True  # Mark as diagnosed by AI
+                original_ecg_file.instanceIDs.append(modified_instance_id)
                 original_ecg_file.save()
                 
                 logger.info(f"Updated original ECG file {instance_id} with diagnosis result")
