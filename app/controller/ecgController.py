@@ -931,8 +931,12 @@ async def get_patient_ecg_files(
                     if isinstance(instance_details, dict):
                         # Get instance creation time from DICOM tags
                         # Using StudyDate and StudyTime from the new tag structure
-                        dicom_date = instance_details.get('StudyDate')
-                        dicom_time = instance_details.get('StudyTime', '000000')
+                        dicom_date = instance_details.get('Content Date')
+                        dicom_time = instance_details.get('Content Time', '000000')
+
+                        if dicom_date is None:
+                            dicom_date = instance_details.get('StudyDate')
+                            dicom_time = instance_details.get('StudyTime', '000000')
                         if '.' in dicom_time:  # Handle time format that may contain decimal points
                             dicom_time = dicom_time.split('.')[0]  # Only take hours, minutes, seconds part
                         
