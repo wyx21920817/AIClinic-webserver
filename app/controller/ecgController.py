@@ -931,9 +931,9 @@ async def get_patient_ecg_files(
                     if isinstance(instance_details, dict):
                         # Get instance creation time from DICOM tags
                         # Using StudyDate and StudyTime from the new tag structure
-                        dicom_date = instance_details.get('Content Date')
-                        dicom_time = instance_details.get('Content Time', '000000')
-                        logger.info(f"Instance details: {instance_details}")
+                        dicom_date = instance_details.get('ContentDate')
+                        dicom_time = instance_details.get('ContentTime', '000000')
+                        #logger.info(f"Instance details: {instance_details}")
 
                         if dicom_date is None:
                             dicom_date = instance_details.get('StudyDate')
