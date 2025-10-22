@@ -221,9 +221,26 @@ def generate_ecg_report_pdf(interpretation_data, output_path, notes=None, approv
                     # Add the report text
                     report_text = report.get("report_text", "")
                     if report_text:
-                        # Split the report text by lines and add each line
-                        for line in report_text.split("\n"):
-                            elements.append(Paragraph(line, normal_style))
+                        # Check if report_text is a list (new format with sections)
+                        if isinstance(report_text, list):
+                            for section in report_text:
+                                if isinstance(section, dict):
+                                    # Add section title
+                                    section_title = section.get("section_title", "")
+                                    if section_title:
+                                        elements.append(Paragraph(section_title, heading_style))
+                                    
+                                    # Add section content
+                                    content = section.get("content", "")
+                                    if content:
+                                        elements.append(Paragraph(content, normal_style))
+                                    
+                                    elements.append(Spacer(1, 0.1*inch))
+                        # Handle string format (legacy or simple format)
+                        elif isinstance(report_text, str):
+                            # Split the report text by lines and add each line
+                            for line in report_text.split("\n"):
+                                elements.append(Paragraph(line, normal_style))
                     
                     # Add images if available
                     image_paths = report.get("image_paths", {})
